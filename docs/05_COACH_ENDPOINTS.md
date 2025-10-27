@@ -613,7 +613,11 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "jersey_number": 15,
       "position": "Defender",
       "invite_code": "JHN-4523",
-      "has_statistics": true
+      "season_stats": {
+        "matches_played": 5,
+        "goals": 2,
+        "assists": 1
+      }
     },
     {
       "player_id": "player-uuid-4",
@@ -621,7 +625,11 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "jersey_number": 3,
       "position": "Goalkeeper",
       "invite_code": "ALX-8821",
-      "has_statistics": false
+      "season_stats": {
+        "matches_played": 0,
+        "goals": 0,
+        "assists": 0
+      }
     }
   ],
   "totals": {
@@ -651,18 +659,18 @@ WHERE p.club_id = :club_id
   AND p.is_linked = TRUE
 ORDER BY p.jersey_number;
 
--- 2. Unlinked players
+-- 2. Unlinked players with season stats
 SELECT
   p.player_id,
   p.player_name,
   p.jersey_number,
   p.position,
   p.invite_code,
-  EXISTS(
-    SELECT 1 FROM events
-    WHERE player_name = p.player_name
-  ) as has_statistics
+  pss.matches_played,
+  pss.goals,
+  pss.assists
 FROM players p
+LEFT JOIN player_season_statistics pss ON p.player_id = pss.player_id
 WHERE p.club_id = :club_id
   AND p.is_linked = FALSE
 ORDER BY p.jersey_number;

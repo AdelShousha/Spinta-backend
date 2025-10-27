@@ -471,7 +471,7 @@ Aggregated season statistics for players.
 - Aggregated from `player_match_statistics` table
 - Attributes calculated from season stats using formulas
 - Used for player dashboard and profile screens
-- Only exists for linked players (players who have signed up)
+- Exists for all players (both linked and unlinked players)
 
 ---
 

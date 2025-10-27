@@ -84,8 +84,7 @@ Standard JWT with three parts: `Header.Payload.Signature`
 {
   "user_id": "550e8400-e29b-41d4-a716-446655440000",
   "email": "john@email.com",
-  "user_type": "coach",
-  "exp": 1735230000
+  "user_type": "coach"
 }
 ```
 
@@ -94,8 +93,7 @@ Standard JWT with three parts: `Header.Payload.Signature`
 {
   "user_id": "660e8400-e29b-41d4-a716-446655440001",
   "email": "marcus@email.com",
-  "user_type": "player",
-  "exp": 1735230000
+  "user_type": "player"
 }
 ```
 
@@ -106,7 +104,6 @@ Standard JWT with three parts: `Header.Payload.Signature`
 | `user_id` | String (UUID) | User's unique identifier |
 | `email` | String | User's email address |
 | `user_type` | String | "coach" or "player" |
-| `exp` | Integer | Expiration timestamp (Unix epoch) |
 
 **Optional fields** (can be added if needed):
 - `club_id`: For quick access to club data
@@ -123,20 +120,6 @@ HMACSHA256(
 ```
 
 **SECRET_KEY:** Must be stored securely in environment variables, minimum 256 bits (32 characters).
-
-### Token Expiration
-
-**Default:** 24 hours from issuance
-
-**Calculation:**
-```python
-exp = datetime.utcnow() + timedelta(hours=24)
-exp_timestamp = int(exp.timestamp())
-```
-
-**After expiration:** Token is invalid, user must log in again.
-
-**Future Enhancement:** Implement refresh tokens for extended sessions.
 
 ---
 
@@ -167,8 +150,6 @@ token = auth_header.split('Bearer ')[1]
 ```python
 try:
     payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-except jwt.ExpiredSignatureError:
-    return 401 Unauthorized - "Token has expired"
 except jwt.InvalidTokenError:
     return 401 Unauthorized - "Invalid token"
 ```
@@ -264,8 +245,7 @@ COMMIT;
 token = generate_jwt({
   user_id: user_id,
   email: email,
-  user_type: 'coach',
-  exp: now + 24h
+  user_type: 'coach'
 })
 ```
 
@@ -446,18 +426,13 @@ UPDATE players SET
   updated_at = NOW()
 WHERE player_id = ?;
 
--- 6. Initialize player season statistics
-INSERT INTO player_season_statistics (player_stats_id, player_id, updated_at)
-VALUES (gen_random_uuid(), player_id, NOW());
-
 COMMIT;
 
--- 7. Generate JWT token
+-- 6. Generate JWT token
 token = generate_jwt({
   user_id: player_id,
   email: email,
-  user_type: 'player',
-  exp: now + 24h
+  user_type: 'player'
 })
 ```
 
@@ -540,8 +515,7 @@ WHERE p.player_id = user_id;
 token = generate_jwt({
   user_id: user_id,
   email: email,
-  user_type: user_type,
-  exp: now + 24h
+  user_type: user_type
 })
 ```
 
@@ -779,7 +753,7 @@ All errors return JSON with `detail` field:
 
 **Authentication Errors:**
 - `"Authentication credentials were not provided."` (401)
-- `"Invalid or expired token."` (401)
+- `"Invalid token."` (401)
 - `"Invalid email or password."` (401)
 
 **Authorization Errors:**
@@ -791,34 +765,6 @@ All errors return JSON with `detail` field:
 - `"Invalid invite code."` (404)
 - `"This invite code has already been used."` (409)
 - `"Validation failed"` (400) - with errors object
-
----
-
-## Token Refresh (Future Enhancement)
-
-Current implementation: Tokens expire after 24 hours, requiring re-login.
-
-**Future improvement:** Implement refresh tokens for better UX.
-
-### Proposed Flow:
-
-1. **On Login:** Return both access token (1 hour) and refresh token (30 days)
-2. **Access Token Expires:** Frontend detects 401 error
-3. **Request New Access Token:** `POST /api/auth/refresh` with refresh token
-4. **Refresh Token Expires:** User must log in again
-
-### Additional Tables Needed:
-
-```sql
-CREATE TABLE refresh_tokens (
-  token_id UUID PRIMARY KEY,
-  user_id UUID REFERENCES users(user_id),
-  token_hash VARCHAR(255) NOT NULL,
-  expires_at TIMESTAMP NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  revoked BOOLEAN DEFAULT FALSE
-);
-```
 
 ---
 
@@ -855,10 +801,8 @@ CREATE TABLE refresh_tokens (
 - [ ] Coach can only access their club's data
 - [ ] Player can only access their own data
 - [ ] Invalid token returns 401
-- [ ] Expired token returns 401
 
 ### Security
 - [ ] Passwords are hashed (not stored plain text)
-- [ ] Tokens expire after 24 hours
 - [ ] Rate limiting works correctly
 - [ ] Error messages don't leak sensitive info
