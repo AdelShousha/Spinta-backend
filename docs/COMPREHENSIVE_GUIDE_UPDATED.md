@@ -234,11 +234,7 @@ Step 2: Confirm Your Details
 | `opponent_club_id` | UUID (PK) | Unique identifier | `a1b2c3d4-...` |
 | `club_name` | VARCHAR(255) | Opponent club name | `City Strikers` |
 | `logo_url` | TEXT | Opponent team logo (optional) | `https://...logo.png` |
-| `stadium_name` | VARCHAR(255) | Opponent's home stadium | `Riverside Arena` |
 | `created_at` | TIMESTAMP | When added to system | `2025-01-15 10:30:00` |
-
-**ADDED COLUMNS:**
-- ✅ `stadium_name` - Where opponent plays home matches
 
 **Why separate from clubs:**
 - Opponent teams don't have coaches in the system
@@ -247,7 +243,7 @@ Step 2: Confirm Your Details
 
 **UI Usage:**
 - Match cards show opponent name and logo
-- Match detail screen shows opponent info and stadium
+- Match detail screen shows opponent info
 - Admin panel: Creates opponent clubs when processing matches
 
 ---
@@ -266,8 +262,6 @@ Step 2: Confirm Your Details
 | `opponent_name` | VARCHAR(255) | Opponent name (denormalized for speed) | `City Strikers` |
 | `match_date` | DATE | Date of match | `2025-10-08` |
 | `match_time` | TIME | Kickoff time | `15:30:00` |
-| `location` | VARCHAR(255) | Where match was played | `City Stadium` |
-| `stadium_name` | VARCHAR(255) | Stadium name (if away match) | `Riverside Arena` |
 | `home_score` | INTEGER | Goals scored by home team | `3` |
 | `away_score` | INTEGER | Goals scored by away team | `2` |
 | `is_home_match` | BOOLEAN | True if club was home team | `true` |
@@ -278,13 +272,11 @@ Step 2: Confirm Your Details
 - ❌ `match_status` - No longer needed (matches only inserted after completion)
 - ❌ `video_url` - Not stored in app database (handled by admin panel)
 - ❌ `statsbomb_match_id` - Temporary field, removed
-
-**ADDED COLUMNS:**
-- ✅ `stadium_name` - For away matches, stores opponent's stadium
+- ❌ `location` - Not needed
+- ❌ `stadium_name` - Not needed
 
 **Why these columns:**
 - `opponent_name`: Denormalized (duplicated from opponent_clubs table) for faster queries - avoids JOIN
-- `stadium_name`: Only populated if `is_home_match = FALSE`
 - `is_home_match`: Determines which team's stats go in "home" vs "away" columns
 
 **Critical Change - Match Creation:**
@@ -1137,8 +1129,6 @@ ORDER BY match_date DESC, match_time DESC
     "opponent_logo_url": "https://...logo.png",
     "match_date": "2025-10-08",
     "match_time": "15:30:00",
-    "location": "City Stadium",
-    "stadium_name": null,
     "home_score": 3,
     "away_score": 2,
     "is_home_match": true
@@ -1623,8 +1613,7 @@ When admin clicks "Submit & Create Match":
 ```sql
 INSERT INTO matches (
   match_id, club_id, opponent_club_id, opponent_name,
-  match_date, match_time, location, stadium_name,
-  home_score, away_score, is_home_match,
+  match_date, match_time, home_score, away_score, is_home_match,
   created_at, updated_at
 ) VALUES (...);
 ```
@@ -1889,8 +1878,6 @@ WHERE player_id = (
     "opponent_name": "City Strikers",
     "match_date": "2025-10-08",
     "match_time": "15:30:00",
-    "location": "City Stadium",
-    "stadium_name": null,
     "home_score": 3,
     "away_score": 2,
     "is_home_match": true
@@ -1989,8 +1976,8 @@ WHERE player_id = (
 1. **coaches** - Removed profile_image_url
 2. **players** - Removed weight, changed height to INTEGER (cm)
 3. **clubs** - Removed invite_code
-4. **teams** → **opponent_clubs** - Renamed, added stadium_name
-5. **matches** - Removed match_status, video_url, statsbomb_match_id; added stadium_name
+4. **teams** → **opponent_clubs** - Renamed
+5. **matches** - Removed match_status, video_url, statsbomb_match_id, location, stadium_name
 6. **events** - Renamed player_id → statsbomb_player_id, team_id → statsbomb_team_id
 7. **goals** - Renamed ID columns for clarity
 8. **match_statistics** - Removed fouls/cards, kept only UI-specific stats
