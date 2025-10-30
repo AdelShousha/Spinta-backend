@@ -196,8 +196,6 @@ Stores match records.
 | opponent_name | VARCHAR(255) | NOT NULL | Opponent name (denormalized) |
 | match_date | DATE | NOT NULL | Match date |
 | match_time | TIME | NULL | Match kickoff time |
-| location | VARCHAR(255) | NULL | Match location |
-| stadium_name | VARCHAR(255) | NULL | Stadium name (if away match) |
 | is_home_match | BOOLEAN | NOT NULL | Is this a home match? |
 | home_score | INTEGER | NULL | Final home team score |
 | away_score | INTEGER | NULL | Final away team score |
