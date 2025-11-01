@@ -83,6 +83,7 @@ Stores club/team information.
 | club_id | UUID | PRIMARY KEY | Unique club identifier |
 | coach_id | UUID | FOREIGN KEY → coaches(coach_id), UNIQUE | Owner coach |
 | club_name | VARCHAR(255) | NOT NULL | Club name |
+| statsbomb_team_id | INTEGER | UNIQUE, NULL | StatsBomb team ID |
 | country | VARCHAR(100) | NULL | Club country |
 | age_group | VARCHAR(20) | NULL | Team age group (e.g., "U16") |
 | stadium | VARCHAR(255) | NULL | Home stadium name |
@@ -101,6 +102,8 @@ Stores club/team information.
 **Notes:**
 - Each coach can only create one club (enforced by UNIQUE constraint on coach_id)
 - `invite_code` removed (moved to players table)
+- `statsbomb_team_id` is NULL initially, automatically populated from first match upload
+- Used to match club to StatsBomb event data
 
 ---
 
@@ -171,16 +174,20 @@ Stores opponent team information (not managed by our coaches).
 |--------|------|-------------|-------------|
 | opponent_club_id | UUID | PRIMARY KEY | Opponent club identifier |
 | opponent_name | VARCHAR(255) | NOT NULL | Opponent team name |
+| statsbomb_team_id | INTEGER | UNIQUE, NULL | StatsBomb team ID |
 | logo_url | TEXT | NULL | Opponent logo URL |
 | created_at | TIMESTAMP | NOT NULL | Record creation time |
 
 **Relationships:**
 - One-to-many with `matches` table
+- One-to-many with `opponent_players` table
 
 **Notes:**
 - Replaces the old `teams` table
-- Only stores basic info (name, logo)
+- Only stores basic info (name, logo, StatsBomb ID)
 - Not linked to user accounts
+- Created automatically when processing matches
+- `statsbomb_team_id` extracted from match event data
 
 ---
 
@@ -217,11 +224,40 @@ Stores match records.
 - Removed: `match_status`, `video_url`, `statsbomb_match_id` (not needed)
 - `opponent_name` is denormalized for easier queries
 - Scores are NULL until match is completed
-- Created by coach uploading match video
+- Created by coach uploading match video and StatsBomb data
 
 ---
 
-### 7. goals
+### 7. opponent_players
+
+Stores opponent team players for lineup display purposes.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| opponent_player_id | UUID | PRIMARY KEY | Opponent player identifier |
+| opponent_club_id | UUID | FOREIGN KEY → opponent_clubs(opponent_club_id), NOT NULL | Opponent club |
+| player_name | VARCHAR(255) | NOT NULL | Player name from event data |
+| statsbomb_player_id | INTEGER | NULL | StatsBomb player ID |
+| jersey_number | INTEGER | NULL | Player's jersey number |
+| position | VARCHAR(50) | NULL | Player position |
+| created_at | TIMESTAMP | NOT NULL | Record creation time |
+
+**Indexes:**
+- `idx_opponent_players_opponent_club_id` on `opponent_club_id`
+- `idx_opponent_players_statsbomb_player_id` on `statsbomb_player_id`
+
+**Relationships:**
+- Many-to-one with `opponent_clubs` table
+
+**Notes:**
+- Created automatically from match Starting XI events
+- Used ONLY for lineup display in match details
+- No individual statistics tracked (only team-level stats in match_statistics)
+- Duplicate checking: Match by (opponent_club_id, statsbomb_player_id) or (opponent_club_id, player_name, jersey_number)
+
+---
+
+### 8. goals
 
 Stores goal events from matches.
 
@@ -252,7 +288,7 @@ Stores goal events from matches.
 
 ---
 
-### 8. events
+### 9. events
 
 Stores raw StatsBomb event data.
 
@@ -289,7 +325,7 @@ Stores raw StatsBomb event data.
 
 ---
 
-### 9. match_statistics
+### 10. match_statistics
 
 Stores aggregated statistics per match (for both teams).
 
@@ -333,7 +369,7 @@ Stores aggregated statistics per match (for both teams).
 
 ---
 
-### 10. player_match_statistics
+### 11. player_match_statistics
 
 Stores individual player statistics per match.
 
@@ -378,7 +414,7 @@ Stores individual player statistics per match.
 
 ---
 
-### 11. club_season_statistics
+### 12. club_season_statistics
 
 Aggregated season statistics for clubs.
 
@@ -428,7 +464,7 @@ Aggregated season statistics for clubs.
 
 ---
 
-### 12. player_season_statistics
+### 13. player_season_statistics
 
 Aggregated season statistics for players.
 
@@ -473,7 +509,7 @@ Aggregated season statistics for players.
 
 ---
 
-### 13. training_plans
+### 14. training_plans
 
 Stores training plans assigned to players.
 
@@ -507,7 +543,7 @@ Stores training plans assigned to players.
 
 ---
 
-### 14. training_exercises
+### 15. training_exercises
 
 Stores individual exercises within training plans.
 
@@ -547,6 +583,7 @@ Stores individual exercises within training plans.
 
 ### Tables Added
 1. `player_season_statistics` - Player attributes and aggregated stats
+2. `opponent_players` - Opponent team players for lineup display
 
 ### Tables Removed
 1. `player_invite_codes` - Invite codes now in players table
@@ -576,9 +613,11 @@ Stores individual exercises within training plans.
 - **Removed**: `profile_image_url`
 
 #### clubs
+- **Added**: `statsbomb_team_id`
 - **Removed**: `invite_code`
 
 #### opponent_clubs
+- **Added**: `statsbomb_team_id`
 - **Renamed from**: `teams`
 
 ---
@@ -596,6 +635,7 @@ Stores individual exercises within training plans.
 - `clubs` → `players`
 - `clubs` → `matches`
 - `opponent_clubs` → `matches`
+- `opponent_clubs` → `opponent_players`
 - `matches` → `goals`
 - `matches` → `events`
 - `matches` → `match_statistics` (2 per match)
@@ -618,6 +658,7 @@ All foreign keys should be enforced with `ON DELETE` rules:
 - `players.club_id` → `clubs.club_id` ON DELETE CASCADE
 - `matches.club_id` → `clubs.club_id` ON DELETE CASCADE
 - `matches.opponent_club_id` → `opponent_clubs.opponent_club_id` ON DELETE SET NULL
+- `opponent_players.opponent_club_id` → `opponent_clubs.opponent_club_id` ON DELETE CASCADE
 - `goals.match_id` → `matches.match_id` ON DELETE CASCADE
 - `events.match_id` → `matches.match_id` ON DELETE CASCADE
 - `match_statistics.match_id` → `matches.match_id` ON DELETE CASCADE
@@ -633,6 +674,8 @@ All foreign keys should be enforced with `ON DELETE` rules:
 - `users.email` - No duplicate emails
 - `players.invite_code` - Unique invite codes
 - `clubs.coach_id` - One club per coach
+- `clubs.statsbomb_team_id` - One StatsBomb team ID per club (if not NULL)
+- `opponent_clubs.statsbomb_team_id` - One StatsBomb team ID per opponent club (if not NULL)
 - `match_statistics (match_id, team_type)` - One record per team per match
 - `player_match_statistics (player_id, match_id)` - One record per player per match
 - `club_season_statistics.club_id` - One record per club

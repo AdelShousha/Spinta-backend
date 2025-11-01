@@ -28,26 +28,51 @@ Player Side:
 
 ### Phase 1: Admin Creates Incomplete Players
 
-This happens when a coach uploads a match and the CV service processes the lineup.
+This happens when a coach uploads match data via the admin panel (POST /api/coach/matches).
 
-#### Input Data (from CV Service)
+#### Input Data (from StatsBomb Starting XI Events)
+
+The lineup is extracted from the StatsBomb event data. The admin panel processes the match JSON which contains Starting XI events:
+
 ```json
 {
-  "home_team_lineup": [
-    {
-      "player_name": "Marcus Silva",
-      "jersey_number": 10,
-      "position": "Forward",
-      "statsbomb_player_id": 5470
-    },
-    {
-      "player_name": "Jake Thompson",
-      "jersey_number": 7,
-      "position": "Midfielder",
-      "statsbomb_player_id": 5471
-    }
-    // ... 9 more players
-  ]
+  "id": "event-uuid",
+  "type": {
+    "id": 35,
+    "name": "Starting XI"
+  },
+  "team": {
+    "id": 746,
+    "name": "Thunder United FC"
+  },
+  "tactics": {
+    "formation": 442,
+    "lineup": [
+      {
+        "player": {
+          "id": 5470,
+          "name": "Marcus Silva"
+        },
+        "position": {
+          "id": 23,
+          "name": "Center Forward"
+        },
+        "jersey_number": 10
+      },
+      {
+        "player": {
+          "id": 5471,
+          "name": "Jake Thompson"
+        },
+        "position": {
+          "id": 13,
+          "name": "Right Center Midfield"
+        },
+        "jersey_number": 7
+      }
+      // ... 9 more players (11 total in Starting XI)
+    ]
+  }
 }
 ```
 
@@ -55,19 +80,46 @@ This happens when a coach uploads a match and the CV service processes the lineu
 
 For each player in the lineup:
 
-**Step 1: Check if player already exists**
+**Step 1: Check if player already exists by statsbomb_player_id**
 
 ```sql
 SELECT * FROM players
 WHERE club_id = ?
-  AND (
-    statsbomb_player_id = ?
-    OR jersey_number = ?
-  )
+  AND statsbomb_player_id = ?
 LIMIT 1;
 ```
 
-**Step 2: If player doesn't exist, create new player record**
+**Step 2a: If player exists by statsbomb_player_id, update jersey and position**
+
+```sql
+UPDATE players SET
+  jersey_number = ?,  -- Update to current jersey number
+  position = ?,       -- Update to current position
+  updated_at = NOW()
+WHERE player_id = ?;
+```
+
+**Step 2b: If not found by statsbomb_player_id, check by name or jersey**
+
+```sql
+SELECT * FROM players
+WHERE club_id = ?
+  AND (player_name = ? OR jersey_number = ?)
+LIMIT 1;
+```
+
+If found, update the player's statsbomb_player_id:
+```sql
+UPDATE players SET
+  statsbomb_player_id = ?,
+  player_name = ?,
+  jersey_number = ?,
+  position = ?,
+  updated_at = NOW()
+WHERE player_id = ?;
+```
+
+**Step 3: If player doesn't exist at all, create new player record**
 
 ```sql
 -- Generate unique invite code
@@ -97,14 +149,48 @@ INSERT INTO players (
   NOW(),
   NOW()
 );
+
+-- 4. Initialize player season statistics
+INSERT INTO player_season_statistics (
+  player_stats_id,
+  player_id,
+  updated_at
+) VALUES (
+  gen_random_uuid(),
+  player_id,
+  NOW()
+);
 ```
 
-**Step 3: Store invite code for coach to share**
+**Step 4: Return newly created players with invite codes**
 
-The invite code is now available in `players.invite_code`. The coach can:
-- View all unlinked players with their invite codes
-- Print/export list of codes to share with team
-- Send codes individually via messaging
+After match processing completes, the API returns a list of newly created players so the coach can share invite codes:
+
+```json
+{
+  "success": true,
+  "match_id": "match-uuid",
+  "summary": {
+    "players_created": 3
+  },
+  "new_players": [
+    {
+      "player_name": "Marcus Silva",
+      "jersey_number": 10,
+      "invite_code": "MRC-1827"
+    },
+    {
+      "player_name": "Alex Johnson",
+      "jersey_number": 4,
+      "invite_code": "AJO-5643"
+    }
+  ]
+}
+```
+
+The coach can then:
+- View all unlinked players with their invite codes (GET /api/coach/players)
+- Share codes with players via messaging or in person
 
 #### Invite Code Generation Requirements
 

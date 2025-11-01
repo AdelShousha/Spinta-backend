@@ -48,15 +48,25 @@ This comprehensive guide documents the database schema and API specifications fo
 
 ## Core Workflows
 
-### Coach Workflow
+### Coach/Admin Workflow
 1. Sign up and create club
-2. Upload match video
-3. CV processes video and extracts lineup
-4. Coach fills in match details and confirms lineup
-5. System fetches StatsBomb data
-6. Statistics are calculated and displayed
-7. Coach can create training plans for players
-8. Coach can view player progress
+2. Upload match data via admin panel:
+   - Upload match video (processed with fake CV overlay in current version)
+   - Provide match details (opponent, date, time, scores)
+   - Provide StatsBomb event JSON file (~160k lines)
+3. System processes match data:
+   - Creates match record
+   - Extracts lineups from Starting XI events
+   - Creates/updates player records (your club)
+   - Creates opponent player records (for lineup display)
+   - Inserts all events to database
+   - Calculates match statistics (both teams)
+   - Calculates player statistics
+   - Updates season statistics
+4. Coach views match details, lineups, and statistics
+5. Coach shares invite codes with players
+6. Coach can create training plans for players
+7. Coach can view player progress
 
 ### Player Workflow
 1. Receive invite code from coach
@@ -77,6 +87,7 @@ This guide is organized into the following sections:
 4. **04_AUTHENTICATION.md** - JWT authentication specification
 5. **05_COACH_ENDPOINTS.md** - All coach-facing API endpoints
 6. **06_PLAYER_ENDPOINTS.md** - All player-facing API endpoints
+7. **07_ADMIN_ENDPOINTS.md** - Admin panel match upload endpoint
 
 ## Key Design Decisions
 
@@ -126,40 +137,81 @@ This guide is organized into the following sections:
 - Clear mapping between UI and API
 
 ### 6. JWT Authentication
-**Decision**: Use JWT tokens for all authenticated requests.
+**Decision**: Use JWT tokens for all authenticated requests without expiration.
 
 **Rationale**:
 - Stateless authentication
 - Scalable architecture
 - Standard industry practice
 - Easy to implement on mobile apps
+- No expiration simplifies implementation
+
+### 7. Opponent Players Storage
+**Decision**: Store opponent players in separate `opponent_players` table, track only basic info for lineup display.
+
+**Rationale**:
+- Opponent players don't need invite codes or user accounts
+- Only used for displaying lineups in match details
+- No individual opponent player statistics needed (only team-level stats)
+- Cleaner separation between your club's players and opponents
+- Prevents confusion with player signup system
+
+### 8. StatsBomb Team ID Matching
+**Decision**: Add `statsbomb_team_id` to both `clubs` and `opponent_clubs` tables for reliable team matching.
+
+**Rationale**:
+- Name-based matching is unreliable (typos, format differences)
+- StatsBomb provides unique team IDs
+- Automatically populated from first match upload
+- Enables accurate event-to-team mapping
 
 ## Data Flow
 
-### Match Processing Flow
+### Match Processing Flow (Admin Panel)
 ```
-1. Coach uploads match video
+1. Coach uploads match data via admin panel (POST /api/coach/matches)
+   - Match details (opponent, date, time, scores)
+   - StatsBomb event JSON file (~160k lines, ~3000 events)
+   - Match video (shown with fake CV overlay)
    ↓
-2. CV Service processes video
+2. Backend identifies teams from Starting XI events
+   - Match club name to StatsBomb team names
+   - Set statsbomb_team_id for club (if first match)
    ↓
-3. Lineup extracted (names, jersey numbers, positions)
+3. Create/get opponent club record
+   - Match by statsbomb_team_id or opponent_name
    ↓
-4. For each player:
-   - Check if player exists (by statsbomb_player_id or jersey_number)
-   - If not exists:
-     * Create player record with player_name, jersey_number, position
-     * Add statsbomb_player_id from CV data
-     * Generate unique invite_code
-     * Set is_linked = FALSE
+4. Create match record
    ↓
-5. Coach reviews and confirms lineup
+5. Insert all events to database (~3000 events)
    ↓
-6. Fetch StatsBomb data using statsbomb_player_id
+6. Extract goals from Shot events
+   - Find assists from Pass events with goal_assist flag
+   - Validate goal counts vs admin's input scores
    ↓
-7. Process events and calculate statistics
+7. Extract lineups from Starting XI events
+   - For each player in your club's lineup:
+     * Check if exists by statsbomb_player_id
+     * If exists: Update jersey_number and position
+     * If not: Create incomplete player with invite_code
+     * Initialize player_season_statistics
+   - For each opponent player:
+     * Create/update opponent_players record
    ↓
-8. Update match_statistics, player_match_statistics,
-   club_season_statistics, player_season_statistics
+8. Calculate match statistics (both teams)
+   - Aggregate from events table
+   - Store in match_statistics (2 records: our_team, opponent_team)
+   ↓
+9. Calculate player match statistics (your club's players only)
+   - Aggregate from events table by statsbomb_player_id
+   - Store in player_match_statistics
+   ↓
+10. Recalculate season statistics
+   - Update club_season_statistics
+   - Update player_season_statistics for all players
+   - Calculate player attributes (attacking, technique, etc.)
+   ↓
+11. Return success with summary (events processed, players created, warnings)
 ```
 
 ### Player Signup Flow
@@ -286,7 +338,7 @@ List endpoints support filtering via query parameters where applicable:
 
 ### 1. Authentication
 - Passwords must be hashed (bcrypt recommended)
-- JWT tokens expire after 24 hours
+- JWT tokens do not expire
 - Tokens signed with secret key
 
 ### 2. Authorization
@@ -323,23 +375,26 @@ Standard HTTP status codes:
 
 ## Database Summary
 
-### Core Tables (11 tables)
+### Core Tables (12 tables)
 1. **users** - User accounts (coaches and players)
 2. **coaches** - Coach-specific data
-3. **clubs** - Club/team information
+3. **clubs** - Club/team information (with statsbomb_team_id)
 4. **players** - Player profiles and invite codes
-5. **opponent_clubs** - Opponent team information
-6. **matches** - Match records
-7. **goals** - Goal events
-8. **events** - StatsBomb event data
-9. **training_plans** - Training plans assigned to players
-10. **training_exercises** - Individual exercises within plans
+5. **opponent_clubs** - Opponent team information (with statsbomb_team_id)
+6. **opponent_players** - Opponent players for lineup display
+7. **matches** - Match records
+8. **goals** - Goal events
+9. **events** - StatsBomb event data
+10. **training_plans** - Training plans assigned to players
+11. **training_exercises** - Individual exercises within plans
 
 ### Statistics Tables (4 tables)
-11. **match_statistics** - Team statistics per match
-12. **player_match_statistics** - Player statistics per match
-13. **club_season_statistics** - Aggregated club season stats
-14. **player_season_statistics** - Aggregated player season stats
+12. **match_statistics** - Team statistics per match
+13. **player_match_statistics** - Player statistics per match
+14. **club_season_statistics** - Aggregated club season stats
+15. **player_season_statistics** - Aggregated player season stats
+
+**Total: 15 tables**
 
 ## API Summary
 
@@ -359,7 +414,10 @@ Standard HTTP status codes:
 - `PUT /api/coach/training-plans/{plan_id}`
 - `DELETE /api/coach/training-plans/{plan_id}`
 
-### Player Endpoints (9)
+### Admin Endpoints (1)
+- `POST /api/coach/matches` - Upload match data with StatsBomb events
+
+### Player Endpoints (8)
 - `GET /api/player/dashboard`
 - `GET /api/player/matches`
 - `GET /api/player/matches/{match_id}`
@@ -373,11 +431,19 @@ Standard HTTP status codes:
 
 ## Changelog
 
-### Version 1.0 (Current)
+### Version 1.1 (Current)
+- Added admin panel match upload endpoint
+- Added `opponent_players` table for lineup display
+- Added `statsbomb_team_id` to clubs and opponent_clubs
+- Automated match processing from StatsBomb event data
+- Automated player creation with invite codes
+- Statistics calculation from raw events
+- JWT authentication without expiration
+
+### Version 1.0
 - Initial comprehensive design
 - Screen-based API architecture
 - Invite code stored in players table
 - StatsBomb player ID added to players table
 - Training completion tracked in exercises table
-- JWT authentication
 - Player attributes calculation

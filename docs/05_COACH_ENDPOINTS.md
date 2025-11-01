@@ -478,17 +478,15 @@ WHERE e.match_id = :match_id
   AND p.club_id = :club_id
 ORDER BY p.jersey_number;
 
--- 3. Opponent lineup (from events)
-SELECT DISTINCT
-  player_name,
-  -- Extract jersey from events if available
-  -- Otherwise default to sequential numbering
-  position_name as position
-FROM events
-WHERE match_id = :match_id
-  AND team_name != :our_club_name
-  AND event_type_name = 'Starting XI'
-ORDER BY player_name;
+-- 3. Opponent lineup (from opponent_players table)
+SELECT
+  op.player_name,
+  op.jersey_number,
+  op.position
+FROM opponent_players op
+JOIN matches m ON m.opponent_club_id = op.opponent_club_id
+WHERE m.match_id = :match_id
+ORDER BY op.jersey_number;
 
 -- 4. Goals
 SELECT
