@@ -127,13 +127,9 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 -- 1. Get coach and club info
 SELECT
   u.full_name as coach_name,
-  u.email as coach_email,
   c.club_id,
   c.club_name,
-  c.logo_url,
-  c.age_group,
-  c.stadium,
-  c.country
+  c.logo_url
 FROM users u
 JOIN coaches co ON u.user_id = co.coach_id
 JOIN clubs c ON co.coach_id = c.coach_id
@@ -141,13 +137,9 @@ WHERE u.user_id = :user_id_from_jwt;
 
 -- 2. Get season record from club_season_statistics
 SELECT
-  (wins + losses + draws) as matches_played,
   wins,
   draws,
-  losses,
-  goals_scored,
-  goals_conceded,
-  total_clean_sheets
+  losses
 FROM club_season_statistics
 WHERE club_id = :club_id;
 
@@ -177,7 +169,6 @@ FROM (
 SELECT
   m.match_id,
   m.opponent_name,
-  oc.logo_url as opponent_logo_url,
   m.match_date,
   m.match_time,
   m.home_score,
@@ -194,7 +185,6 @@ SELECT
   END as result,
   COUNT(*) OVER() as total_count
 FROM matches m
-LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
 WHERE m.club_id = :club_id
 ORDER BY m.match_date DESC, m.match_time DESC
 LIMIT :matches_limit OFFSET :matches_offset;
@@ -1132,12 +1122,20 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "match_id": "match-uuid-1",
     "match_date": "2025-10-08",
     "match_time": "15:30",
-    "opponent_name": "City Strikers",
-    "opponent_logo_url": "https://storage.example.com/opponents/city-strikers.png",
     "home_score": 3,
     "away_score": 2,
     "is_home_match": true,
     "result": "W"
+  },
+  "teams": {
+    "our_club": {
+      "club_name": "Thunder United FC",
+      "logo_url": "https://storage.example.com/clubs/thunder-logo.png"
+    },
+    "opponent": {
+      "opponent_name": "City Strikers",
+      "logo_url": "https://storage.example.com/opponents/city-strikers.png"
+    }
   },
   "player_summary": {
     "player_name": "Marcus Silva",
@@ -1175,16 +1173,18 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 **Database Queries:**
 
 ```sql
--- 1. Match info
+-- 1. Match info with teams
 SELECT
   m.match_id,
   m.match_date,
   m.match_time,
-  m.opponent_name,
-  oc.logo_url as opponent_logo_url,
   m.home_score,
   m.away_score,
   m.is_home_match,
+  c.club_name as our_club_name,
+  c.logo_url as our_logo_url,
+  m.opponent_name,
+  oc.logo_url as opponent_logo_url,
   CASE
     WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
     WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
@@ -1195,6 +1195,7 @@ SELECT
   END as result
 FROM matches m
 LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
+JOIN clubs c ON m.club_id = c.club_id
 WHERE m.match_id = :match_id
   AND m.club_id = :club_id_from_jwt;
 

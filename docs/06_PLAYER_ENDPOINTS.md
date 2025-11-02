@@ -238,7 +238,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 SELECT
   m.match_id,
   m.opponent_name,
-  oc.logo_url as opponent_logo_url,
   m.match_date,
   m.match_time,
   m.home_score,
@@ -252,14 +251,9 @@ SELECT
     WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
     ELSE 'D'
   END as result,
-  pms.goals,
-  pms.assists,
-  pms.shots,
-  pms.shots_on_target,
   COUNT(*) OVER() as total_count
 FROM player_match_statistics pms
 JOIN matches m ON pms.match_id = m.match_id
-LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
 WHERE pms.player_id = :player_id_from_jwt
 ORDER BY m.match_date DESC
 LIMIT :limit OFFSET :offset;
@@ -299,12 +293,20 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "match_id": "match-uuid-1",
     "match_date": "2025-10-08",
     "match_time": "15:30",
-    "opponent_name": "City Strikers",
-    "opponent_logo_url": "https://storage.example.com/opponents/city-strikers.png",
     "home_score": 3,
     "away_score": 2,
     "is_home_match": true,
     "result": "W"
+  },
+  "teams": {
+    "our_club": {
+      "club_name": "Thunder United FC",
+      "logo_url": "https://storage.example.com/clubs/thunder-logo.png"
+    },
+    "opponent": {
+      "opponent_name": "City Strikers",
+      "logo_url": "https://storage.example.com/opponents/city-strikers.png"
+    }
   },
   "player_summary": {
     "player_name": "Marcus Silva",
@@ -342,16 +344,18 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 **Database Queries:**
 
 ```sql
--- 1. Match info
+-- 1. Match info and team details
 SELECT
   m.match_id,
   m.match_date,
   m.match_time,
-  m.opponent_name,
-  oc.logo_url as opponent_logo_url,
   m.home_score,
   m.away_score,
   m.is_home_match,
+  c.club_name as our_club_name,
+  c.logo_url as our_logo_url,
+  m.opponent_name,
+  oc.logo_url as opponent_logo_url,
   CASE
     WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
     WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
@@ -362,6 +366,7 @@ SELECT
   END as result
 FROM matches m
 LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
+JOIN clubs c ON m.club_id = c.club_id
 WHERE m.match_id = :match_id
   AND m.club_id = (SELECT club_id FROM players WHERE player_id = :player_id_from_jwt);
 
