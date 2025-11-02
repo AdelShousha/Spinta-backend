@@ -4,23 +4,33 @@
 
 This document details all API endpoints for the player-facing features of the Spinta platform. All endpoints require authentication with a valid JWT token and `user_type = "player"`.
 
+The player mobile app uses a bottom navigation bar with 4 tabs:
+- **My Stats**: Player's attributes and season statistics
+- **Matches**: List and details of all matches
+- **Training**: List and details of training plans
+- **Profile**: Player profile information
+
 ## Authentication
 
 All endpoints require:
 - **Header:** `Authorization: Bearer <jwt_token>`
 - **Token payload:** `user_type = "player"`
 
-## Endpoints Organized by UI Screens
+## Navigation Structure
+
+Unlike the coach view which uses top tabs within screens, the player view uses a bottom navigation bar to switch between main sections. Each section may have its own internal tabs.
 
 ---
 
-## 1. Player Dashboard Screen
+## 1. My Stats Tab (Player Dashboard)
 
-**UI Purpose:** Display player's profile summary, club info, season stats, attributes, recent matches, and active training plans.
+**UI Reference:** Page 25 in Spinta UI.pdf
+
+**UI Purpose:** Display player's attributes (radar chart) and season statistics organized by categories.
 
 ### GET /api/player/dashboard
 
-**Description:** Returns all data needed for the player dashboard screen.
+**Description:** Returns player's attributes and season statistics for the "My Stats" tab.
 
 **Authentication:** Required (Player only)
 
@@ -39,141 +49,101 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "player_name": "Marcus Silva",
     "jersey_number": 10,
     "position": "Forward",
-    "height": 180,
     "profile_image_url": "https://storage.example.com/players/marcus.jpg"
-  },
-  "club": {
-    "club_id": "club-uuid-1",
-    "club_name": "Thunder United FC",
-    "logo_url": "https://storage.example.com/clubs/thunder-logo.png",
-    "age_group": "U16",
-    "coach_name": "John Smith"
-  },
-  "season_summary": {
-    "matches_played": 22,
-    "goals": 12,
-    "assists": 7,
-    "avg_shots_per_game": 4.18
   },
   "attributes": {
     "attacking_rating": 82,
     "technique_rating": 64,
+    "creativity_rating": 85,
     "tactical_rating": 52,
-    "defending_rating": 28,
-    "creativity_rating": 85
+    "defending_rating": 28
   },
-  "recent_matches": [
-    {
-      "match_id": "match-uuid-1",
-      "opponent_name": "City Strikers",
-      "match_date": "2025-10-08",
-      "result": "W",
-      "goals": 2,
-      "assists": 1
+  "season_statistics": {
+    "general": {
+      "matches_played": 22
     },
-    {
-      "match_id": "match-uuid-2",
-      "opponent_name": "North Athletic",
-      "match_date": "2025-10-01",
-      "result": "D",
-      "goals": 1,
-      "assists": 0
+    "attacking": {
+      "goals": 12,
+      "assists": 7,
+      "expected_goals": 10.8,
+      "shots_per_game": 4.2,
+      "shots_on_target_per_game": 2.8,
+      "goals_per_game": 0.55
     },
-    {
-      "match_id": "match-uuid-3",
-      "opponent_name": "West United",
-      "match_date": "2025-09-24",
-      "result": "W",
-      "goals": 0,
-      "assists": 2
+    "passing": {
+      "total_passes": 1144,
+      "passes_completed": 995,
+      "pass_accuracy": 86.9,
+      "key_passes": 58,
+      "crosses_completed": 23
+    },
+    "dribbling": {
+      "total_dribbles": 158,
+      "successful_dribbles": 118,
+      "dribble_success_rate": 74.7
+    },
+    "defending": {
+      "tackles": 45,
+      "tackle_success_rate": 78,
+      "interceptions": 32,
+      "interception_success_rate": 81
     }
-  ],
-  "active_training": [
-    {
-      "plan_id": "plan-uuid-1",
-      "plan_name": "Sprint Training",
-      "status": "in_progress",
-      "progress_percentage": 60
-    },
-    {
-      "plan_id": "plan-uuid-2",
-      "plan_name": "Finishing Drills",
-      "status": "pending",
-      "progress_percentage": 0
-    }
-  ]
+  }
 }
 ```
 
 **Database Queries:**
 
 ```sql
--- 1. Player and club info
+-- 1. Player basic info
 SELECT
-  p.player_id,
-  p.player_name,
-  p.jersey_number,
-  p.position,
-  p.height,
-  p.profile_image_url,
-  c.club_id,
-  c.club_name,
-  c.logo_url,
-  c.age_group,
-  u.full_name as coach_name
-FROM players p
-JOIN clubs c ON p.club_id = c.club_id
-JOIN coaches co ON c.coach_id = co.coach_id
-JOIN users u ON co.coach_id = u.user_id
-WHERE p.player_id = :player_id_from_jwt;
-
--- 2. Season stats and attributes
-SELECT
-  matches_played,
-  goals,
-  assists,
-  shots_per_game,
-  attacking_rating,
-  technique_rating,
-  tactical_rating,
-  defending_rating,
-  creativity_rating
-FROM player_season_statistics
+  player_id,
+  player_name,
+  jersey_number,
+  position,
+  profile_image_url
+FROM players
 WHERE player_id = :player_id_from_jwt;
 
--- 3. Recent matches (last 3)
+-- 2. Attributes and season statistics
 SELECT
-  m.match_id,
-  m.opponent_name,
-  m.match_date,
-  CASE
-    WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
-    WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
-    WHEN m.is_home_match AND m.home_score = m.away_score THEN 'D'
-    WHEN NOT m.is_home_match AND m.away_score > m.home_score THEN 'W'
-    WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
-    ELSE 'D'
-  END as result,
-  pms.goals,
-  pms.assists
-FROM player_match_statistics pms
-JOIN matches m ON pms.match_id = m.match_id
-WHERE pms.player_id = :player_id_from_jwt
-ORDER BY m.match_date DESC
-LIMIT 3;
+  -- Attributes
+  attacking_rating,
+  technique_rating,
+  creativity_rating,
+  tactical_rating,
+  defending_rating,
 
--- 4. Active training (pending or in_progress)
-SELECT
-  tp.plan_id,
-  tp.plan_name,
-  tp.status,
-  (COUNT(CASE WHEN te.completed THEN 1 END) * 100.0 /
-   NULLIF(COUNT(te.exercise_id), 0)) as progress_percentage
-FROM training_plans tp
-LEFT JOIN training_exercises te ON tp.plan_id = te.plan_id
-WHERE tp.player_id = :player_id_from_jwt
-  AND tp.status IN ('pending', 'in_progress')
-GROUP BY tp.plan_id;
+  -- General
+  matches_played,
+
+  -- Attacking
+  goals,
+  assists,
+  expected_goals,
+  shots_per_game,
+  shots_on_target_per_game,
+  (goals::decimal / NULLIF(matches_played, 0)) as goals_per_game,
+
+  -- Passing
+  total_passes,
+  passes_completed,
+  (passes_completed * 100.0 / NULLIF(total_passes, 0)) as pass_accuracy,
+  key_passes,
+  crosses_completed,
+
+  -- Dribbling
+  total_dribbles,
+  successful_dribbles,
+  (successful_dribbles * 100.0 / NULLIF(total_dribbles, 0)) as dribble_success_rate,
+
+  -- Defending
+  tackles,
+  tackle_success_rate,
+  interceptions,
+  interception_success_rate
+FROM player_season_statistics
+WHERE player_id = :player_id_from_jwt;
 ```
 
 **Error Responses:**
@@ -194,13 +164,15 @@ Forbidden (403):
 
 ---
 
-## 2. Player Matches List Screen
+## 2. Matches Tab - Matches List Screen
+
+**UI Reference:** Page 26 in Spinta UI.pdf
 
 **UI Purpose:** Display all matches the player participated in with their personal stats.
 
 ### GET /api/player/matches
 
-**Description:** Returns paginated list of matches with player's statistics for each match.
+**Description:** Returns paginated list of all matches with player's statistics for each match.
 
 **Authentication:** Required (Player only)
 
@@ -218,7 +190,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 **Response (200 OK):**
 ```json
 {
-  "total_matches": 22,
+  "total_count": 22,
   "matches": [
     {
       "match_id": "match-uuid-1",
@@ -229,13 +201,12 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "result": "W",
       "home_score": 3,
       "away_score": 2,
+      "is_home_match": true,
       "player_stats": {
         "goals": 2,
         "assists": 1,
         "shots": 6,
-        "shots_on_target": 4,
-        "total_passes": 52,
-        "completed_passes": 46
+        "shots_on_target": 4
       }
     },
     {
@@ -247,13 +218,12 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "result": "D",
       "home_score": 1,
       "away_score": 1,
+      "is_home_match": true,
       "player_stats": {
         "goals": 1,
         "assists": 0,
         "shots": 5,
-        "shots_on_target": 3,
-        "total_passes": 48,
-        "completed_passes": 41
+        "shots_on_target": 3
       }
     }
   ]
@@ -271,6 +241,7 @@ SELECT
   m.match_time,
   m.home_score,
   m.away_score,
+  m.is_home_match,
   CASE
     WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
     WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
@@ -283,8 +254,6 @@ SELECT
   pms.assists,
   pms.shots,
   pms.shots_on_target,
-  pms.total_passes,
-  pms.completed_passes,
   COUNT(*) OVER() as total_count
 FROM player_match_statistics pms
 JOIN matches m ON pms.match_id = m.match_id
@@ -296,13 +265,15 @@ LIMIT :limit OFFSET :offset;
 
 ---
 
-## 3. Player Match Detail Screen
+## 3. Matches Tab - Match Detail Screen
 
-**UI Purpose:** Display detailed statistics for a specific match, comparing player's performance to season averages.
+**UI Reference:** Page 27 in Spinta UI.pdf
+
+**UI Purpose:** Display detailed statistics for a specific match with 3 internal tabs: Summary, Statistics, and Lineup.
 
 ### GET /api/player/matches/{match_id}
 
-**Description:** Returns detailed player statistics for a specific match.
+**Description:** Returns complete match details with 3 tabs of data (same structure as coach view but for player perspective).
 
 **Authentication:** Required (Player only)
 
@@ -327,32 +298,104 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "match_time": "15:30",
     "result": "W",
     "home_score": 3,
-    "away_score": 2
+    "away_score": 2,
+    "is_home_match": true,
+    "club_name": "Thunder United FC",
+    "club_logo_url": "https://storage.example.com/clubs/thunder-logo.png"
   },
-  "player_stats": {
-    "goals": 2,
-    "assists": 1,
-    "expected_goals": 1.800,
-    "shots": 6,
-    "shots_on_target": 4,
-    "total_dribbles": 9,
-    "successful_dribbles": 7,
-    "total_passes": 52,
-    "completed_passes": 46,
-    "short_passes": 38,
-    "long_passes": 14,
-    "final_third_passes": 18,
-    "crosses": 5,
-    "tackles": 5,
-    "tackle_success_rate": 80.00,
-    "interceptions": 5,
-    "interception_success_rate": 83.00
+  "summary": {
+    "goal_scorers": {
+      "home_goals": [
+        {
+          "player_id": "player-uuid-1",
+          "player_name": "Marcus Silva",
+          "jersey_number": 10,
+          "goals": 2,
+          "minutes": [23, 67]
+        },
+        {
+          "player_id": "player-uuid-2",
+          "player_name": "David Chen",
+          "jersey_number": 7,
+          "goals": 1,
+          "minutes": [45]
+        }
+      ],
+      "away_goals": [
+        {
+          "player_id": "opponent-player-uuid-1",
+          "player_name": "James Wilson",
+          "jersey_number": 9,
+          "goals": 2,
+          "minutes": [34, 78]
+        }
+      ]
+    }
   },
-  "season_averages": {
-    "goals_per_game": 0.55,
-    "assists_per_game": 0.32,
-    "shots_per_game": 4.18,
-    "pass_accuracy": 86.90
+  "statistics": {
+    "home_team": {
+      "possession": 58,
+      "shots": 18,
+      "shots_on_target": 12,
+      "corners": 7,
+      "fouls": 11,
+      "yellow_cards": 2,
+      "red_cards": 0,
+      "passes": 487,
+      "pass_accuracy": 84
+    },
+    "away_team": {
+      "possession": 42,
+      "shots": 11,
+      "shots_on_target": 6,
+      "corners": 4,
+      "fouls": 14,
+      "yellow_cards": 3,
+      "red_cards": 0,
+      "passes": 352,
+      "pass_accuracy": 78
+    }
+  },
+  "lineup": {
+    "home_team": {
+      "team_name": "Thunder United FC",
+      "formation": "4-3-3",
+      "starting_xi": [
+        {
+          "player_id": "player-uuid-1",
+          "player_name": "Marcus Silva",
+          "jersey_number": 10,
+          "position": "Forward"
+        },
+        {
+          "player_id": "player-uuid-2",
+          "player_name": "David Chen",
+          "jersey_number": 7,
+          "position": "Midfielder"
+        }
+      ],
+      "substitutes": [
+        {
+          "player_id": "player-uuid-5",
+          "player_name": "Lucas Brown",
+          "jersey_number": 15,
+          "position": "Forward"
+        }
+      ]
+    },
+    "away_team": {
+      "team_name": "City Strikers",
+      "formation": "4-4-2",
+      "starting_xi": [
+        {
+          "player_id": "opponent-player-uuid-1",
+          "player_name": "James Wilson",
+          "jersey_number": 9,
+          "position": "Forward"
+        }
+      ],
+      "substitutes": []
+    }
   }
 }
 ```
@@ -360,7 +403,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 **Database Queries:**
 
 ```sql
--- 1. Match info
+-- 1. Match basic info
 SELECT
   m.match_id,
   m.opponent_name,
@@ -369,6 +412,9 @@ SELECT
   m.match_time,
   m.home_score,
   m.away_score,
+  m.is_home_match,
+  c.club_name,
+  c.logo_url as club_logo_url,
   CASE
     WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
     WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
@@ -379,39 +425,90 @@ SELECT
   END as result
 FROM matches m
 LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
-WHERE m.match_id = :match_id;
+JOIN clubs c ON m.club_id = c.club_id
+WHERE m.match_id = :match_id
+  AND m.club_id = (SELECT club_id FROM players WHERE player_id = :player_id_from_jwt);
 
--- 2. Player match stats
+-- 2. Summary tab - Goal scorers (home team)
 SELECT
-  goals,
-  assists,
-  expected_goals,
-  shots,
-  shots_on_target,
-  total_dribbles,
-  successful_dribbles,
-  total_passes,
-  completed_passes,
-  short_passes,
-  long_passes,
-  final_third_passes,
-  crosses,
-  tackles,
-  tackle_success_rate,
-  interceptions,
-  interception_success_rate
-FROM player_match_statistics
-WHERE match_id = :match_id
-  AND player_id = :player_id_from_jwt;
+  p.player_id,
+  p.player_name,
+  p.jersey_number,
+  COUNT(*) as goals,
+  ARRAY_AGG(me.minute ORDER BY me.minute) as minutes
+FROM match_events me
+JOIN players p ON me.player_id = p.player_id
+WHERE me.match_id = :match_id
+  AND me.event_type = 'Shot'
+  AND me.outcome = 'Goal'
+  AND me.is_home_team = TRUE
+GROUP BY p.player_id, p.player_name, p.jersey_number
+ORDER BY MIN(me.minute);
 
--- 3. Season averages
+-- 3. Summary tab - Goal scorers (away team)
 SELECT
-  (goals::decimal / NULLIF(matches_played, 0)) as goals_per_game,
-  (assists::decimal / NULLIF(matches_played, 0)) as assists_per_game,
-  shots_per_game,
-  (passes_completed * 100.0 / NULLIF(total_passes, 0)) as pass_accuracy
-FROM player_season_statistics
-WHERE player_id = :player_id_from_jwt;
+  op.player_id,
+  op.player_name,
+  op.jersey_number,
+  COUNT(*) as goals,
+  ARRAY_AGG(me.minute ORDER BY me.minute) as minutes
+FROM match_events me
+JOIN opponent_players op ON me.player_id = op.player_id
+WHERE me.match_id = :match_id
+  AND me.event_type = 'Shot'
+  AND me.outcome = 'Goal'
+  AND me.is_home_team = FALSE
+GROUP BY op.player_id, op.player_name, op.jersey_number
+ORDER BY MIN(me.minute);
+
+-- 4. Statistics tab - Team statistics
+SELECT
+  ms.match_id,
+  ms.possession,
+  ms.shots,
+  ms.shots_on_target,
+  ms.corners,
+  ms.fouls,
+  ms.yellow_cards,
+  ms.red_cards,
+  ms.passes,
+  ms.pass_accuracy
+FROM match_statistics ms
+WHERE ms.match_id = :match_id;
+
+-- 5. Lineup tab - Home team lineup
+SELECT
+  p.player_id,
+  p.player_name,
+  p.jersey_number,
+  p.position,
+  ml.lineup_type  -- 'starting' or 'substitute'
+FROM match_lineups ml
+JOIN players p ON ml.player_id = p.player_id
+WHERE ml.match_id = :match_id
+  AND ml.is_home_team = TRUE
+ORDER BY
+  CASE ml.lineup_type WHEN 'starting' THEN 1 ELSE 2 END,
+  p.jersey_number;
+
+-- 6. Lineup tab - Away team lineup
+SELECT
+  op.player_id,
+  op.player_name,
+  op.jersey_number,
+  op.position,
+  ml.lineup_type
+FROM match_lineups ml
+JOIN opponent_players op ON ml.player_id = op.player_id
+WHERE ml.match_id = :match_id
+  AND ml.is_home_team = FALSE
+ORDER BY
+  CASE ml.lineup_type WHEN 'starting' THEN 1 ELSE 2 END,
+  op.jersey_number;
+
+-- 7. Team formations
+SELECT formation FROM matches WHERE match_id = :match_id;
+SELECT opponent_formation FROM matches WHERE match_id = :match_id;
 ```
 
 **Error Responses:**
@@ -432,13 +529,15 @@ Forbidden (403):
 
 ---
 
-## 4. Player Training List Screen
+## 4. Training Tab - Training Plans List Screen
 
-**UI Purpose:** Display all training plans assigned to the player with filtering by status.
+**UI Reference:** Page 28 in Spinta UI.pdf
+
+**UI Purpose:** Display all training plans assigned to the player with their status.
 
 ### GET /api/player/training
 
-**Description:** Returns all training plans for the player with progress information.
+**Description:** Returns all training plans for the player showing name, date, and status.
 
 **Authentication:** Required (Player only)
 
@@ -458,92 +557,57 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
   "training_plans": [
     {
       "plan_id": "plan-uuid-1",
-      "plan_name": "Sprint Training for Marcus",
-      "duration": "2 weeks",
-      "status": "in_progress",
-      "coach_notes": "Focus on maintaining form during maximum effort sprints.",
-      "progress_percentage": 60,
-      "total_exercises": 5,
-      "completed_exercises": 3,
-      "created_at": "2025-10-14T10:00:00Z"
+      "plan_name": "Speed & Agility Development",
+      "created_at": "2025-10-14",
+      "status": "in_progress"
     },
     {
       "plan_id": "plan-uuid-2",
-      "plan_name": "Finishing Drills",
-      "duration": "1 week",
-      "status": "pending",
-      "coach_notes": "Practice different finishing techniques in the box.",
-      "progress_percentage": 0,
-      "total_exercises": 4,
-      "completed_exercises": 0,
-      "created_at": "2025-10-20T10:00:00Z"
+      "plan_name": "Shooting Accuracy Program",
+      "created_at": "2025-10-20",
+      "status": "pending"
     },
     {
       "plan_id": "plan-uuid-3",
-      "plan_name": "Agility Training",
-      "duration": "1 week",
-      "status": "completed",
-      "coach_notes": "Great work on the cone drills!",
-      "progress_percentage": 100,
-      "total_exercises": 3,
-      "completed_exercises": 3,
-      "created_at": "2025-09-15T10:00:00Z"
+      "plan_name": "Strength & Conditioning",
+      "created_at": "2025-09-15",
+      "status": "completed"
     }
-  ],
-  "counts": {
-    "pending": 2,
-    "in_progress": 1,
-    "completed": 5
-  }
+  ]
 }
 ```
 
-**Database Queries:**
+**Database Query:**
 
 ```sql
--- 1. Training plans
 SELECT
-  tp.plan_id,
-  tp.plan_name,
-  tp.duration,
-  tp.status,
-  tp.coach_notes,
-  tp.created_at,
-  COUNT(te.exercise_id) as total_exercises,
-  COUNT(CASE WHEN te.completed THEN 1 END) as completed_exercises,
-  (COUNT(CASE WHEN te.completed THEN 1 END) * 100.0 /
-   NULLIF(COUNT(te.exercise_id), 0)) as progress_percentage
-FROM training_plans tp
-LEFT JOIN training_exercises te ON tp.plan_id = te.plan_id
-WHERE tp.player_id = :player_id_from_jwt
-  AND (tp.status = :status OR :status = 'all')
-GROUP BY tp.plan_id
+  plan_id,
+  plan_name,
+  created_at,
+  status
+FROM training_plans
+WHERE player_id = :player_id_from_jwt
+  AND (status = :status OR :status = 'all')
 ORDER BY
-  CASE tp.status
+  CASE status
     WHEN 'in_progress' THEN 1
     WHEN 'pending' THEN 2
     WHEN 'completed' THEN 3
   END,
-  tp.created_at DESC;
-
--- 2. Status counts
-SELECT
-  status,
-  COUNT(*) as count
-FROM training_plans
-WHERE player_id = :player_id_from_jwt
-GROUP BY status;
+  created_at DESC;
 ```
 
 ---
 
-## 5. Player Training Detail Screen
+## 5. Training Tab - Training Plan Detail Screen
 
-**UI Purpose:** Display detailed training plan with exercises, checkboxes to mark completion, and coach notes.
+**UI Reference:** Page 29 in Spinta UI.pdf
+
+**UI Purpose:** Display detailed training plan with exercises that player can check/uncheck to mark completion.
 
 ### GET /api/player/training/{plan_id}
 
-**Description:** Returns complete training plan details with all exercises and completion status.
+**Description:** Returns complete training plan details with all exercises and checkboxes for completion.
 
 **Authentication:** Required (Player only)
 
@@ -562,74 +626,53 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 {
   "plan": {
     "plan_id": "plan-uuid-1",
-    "plan_name": "Sprint Training for Marcus",
-    "duration": "2 weeks",
+    "plan_name": "Shooting Accuracy Program",
+    "player_name": "Marcus Silva",
+    "player_jersey": 10,
     "status": "in_progress",
-    "coach_notes": "Focus on maintaining form during maximum effort sprints. Rest 2 minutes between sets.",
-    "created_at": "2025-10-14T10:00:00Z"
+    "created_at": "2025-10-14"
+  },
+  "progress": {
+    "percentage": 60,
+    "completed_exercises": 6,
+    "total_exercises": 10
   },
   "exercises": [
     {
       "exercise_id": "exercise-uuid-1",
-      "exercise_name": "40m Sprints",
-      "description": "Maximum effort sprints from standing start. Focus on explosive first step.",
-      "sets": "6",
-      "reps": "1",
-      "duration_minutes": "5",
+      "exercise_name": "Target Shooting Drill",
+      "description": "Practice shooting at designated target zones in the goal. Focus on accuracy over power.",
+      "sets": "3",
+      "reps": "10",
+      "duration_minutes": "20",
       "exercise_order": 1,
       "completed": true,
       "completed_at": "2025-10-15T14:30:00Z"
     },
     {
       "exercise_id": "exercise-uuid-2",
-      "exercise_name": "Flying 30m Sprints",
-      "description": "20m build-up, then 30m at maximum speed.",
+      "exercise_name": "One-Touch Finishing",
+      "description": "Receive pass and shoot in one motion. Work on both feet.",
       "sets": "4",
-      "reps": "1",
-      "duration_minutes": "5",
+      "reps": "8",
+      "duration_minutes": "15",
       "exercise_order": 2,
       "completed": true,
       "completed_at": "2025-10-16T15:00:00Z"
     },
     {
       "exercise_id": "exercise-uuid-3",
-      "exercise_name": "Resistance Band Sprints",
-      "description": "Sprint against resistance band tension.",
-      "sets": "5",
-      "reps": "1",
-      "duration_minutes": "5",
+      "exercise_name": "Power Shooting",
+      "description": "Focus on generating maximum power while maintaining accuracy.",
+      "sets": "3",
+      "reps": "12",
+      "duration_minutes": "20",
       "exercise_order": 3,
-      "completed": true,
-      "completed_at": "2025-10-17T14:45:00Z"
-    },
-    {
-      "exercise_id": "exercise-uuid-4",
-      "exercise_name": "Hill Sprints",
-      "description": "Sprint uphill for power development.",
-      "sets": "4",
-      "reps": "1",
-      "duration_minutes": "5",
-      "exercise_order": 4,
-      "completed": false,
-      "completed_at": null
-    },
-    {
-      "exercise_id": "exercise-uuid-5",
-      "exercise_name": "Cool Down Jog",
-      "description": "Light jog to cool down muscles.",
-      "sets": "1",
-      "reps": "1",
-      "duration_minutes": "10",
-      "exercise_order": 5,
       "completed": false,
       "completed_at": null
     }
   ],
-  "progress": {
-    "total_exercises": 5,
-    "completed_exercises": 3,
-    "progress_percentage": 60
-  }
+  "coach_notes": "Remember to follow through with your shooting motion and keep your body over the ball. Great progress so far!"
 }
 ```
 
@@ -639,10 +682,15 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 SELECT
   tp.plan_id,
   tp.plan_name,
-  tp.duration,
+  p.player_name,
+  p.jersey_number as player_jersey,
   tp.status,
-  tp.coach_notes,
   tp.created_at,
+  tp.coach_notes,
+  COUNT(te.exercise_id) as total_exercises,
+  COUNT(CASE WHEN te.completed THEN 1 END) as completed_exercises,
+  (COUNT(CASE WHEN te.completed THEN 1 END) * 100.0 /
+   NULLIF(COUNT(te.exercise_id), 0)) as percentage,
   te.exercise_id,
   te.exercise_name,
   te.description,
@@ -653,6 +701,7 @@ SELECT
   te.completed,
   te.completed_at
 FROM training_plans tp
+JOIN players p ON tp.player_id = p.player_id
 LEFT JOIN training_exercises te ON tp.plan_id = te.plan_id
 WHERE tp.plan_id = :plan_id
   AND tp.player_id = :player_id_from_jwt
@@ -679,7 +728,9 @@ Forbidden (403):
 
 ## 6. Toggle Exercise Completion
 
-**UI Purpose:** Allow player to mark exercise as complete/incomplete (checkbox toggle).
+**UI Reference:** Page 29 in Spinta UI.pdf (checkbox interaction)
+
+**UI Purpose:** Allow player to mark exercise as complete/incomplete by checking/unchecking checkbox.
 
 ### PUT /api/player/training/exercises/{exercise_id}/toggle
 
@@ -692,7 +743,7 @@ Forbidden (403):
 
 **Request:**
 ```json
-PUT /api/player/training/exercises/exercise-uuid-4/toggle HTTP/1.1
+PUT /api/player/training/exercises/exercise-uuid-3/toggle HTTP/1.1
 Host: api.spinta.com
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
@@ -705,14 +756,14 @@ Content-Type: application/json
 **Response (200 OK):**
 ```json
 {
-  "exercise_id": "exercise-uuid-4",
+  "exercise_id": "exercise-uuid-3",
   "completed": true,
   "completed_at": "2025-10-26T16:30:00Z",
   "plan_progress": {
     "plan_id": "plan-uuid-1",
-    "total_exercises": 5,
-    "completed_exercises": 4,
-    "progress_percentage": 80,
+    "total_exercises": 10,
+    "completed_exercises": 7,
+    "progress_percentage": 70,
     "plan_status": "in_progress"
   }
 }
@@ -789,13 +840,15 @@ Forbidden (403):
 
 ---
 
-## 7. Player Profile Screen
+## 7. Profile Tab - Player Profile Screen
 
-**UI Purpose:** Display player's profile information (read-only view).
+**UI Reference:** Page 30 in Spinta UI.pdf
+
+**UI Purpose:** Display player's profile information.
 
 ### GET /api/player/profile
 
-**Description:** Returns player's profile information, club details, and season summary.
+**Description:** Returns player's profile information, club details, and basic statistics.
 
 **Authentication:** Required (Player only)
 
@@ -828,13 +881,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "matches_played": 22,
     "goals": 12,
     "assists": 7
-  },
-  "attributes": {
-    "attacking_rating": 82,
-    "technique_rating": 64,
-    "tactical_rating": 52,
-    "defending_rating": 28,
-    "creativity_rating": 85
   }
 }
 ```
@@ -862,128 +908,13 @@ JOIN coaches co ON c.coach_id = co.coach_id
 JOIN users coach_user ON co.coach_id = coach_user.user_id
 WHERE p.player_id = :player_id_from_jwt;
 
--- 2. Season summary and attributes
+-- 2. Season summary
 SELECT
   matches_played,
   goals,
-  assists,
-  attacking_rating,
-  technique_rating,
-  tactical_rating,
-  defending_rating,
-  creativity_rating
+  assists
 FROM player_season_statistics
 WHERE player_id = :player_id_from_jwt;
-```
-
----
-
-## 8. Update Player Profile
-
-**UI Purpose:** Allow player to update their profile information.
-
-### PUT /api/player/profile
-
-**Description:** Update player's editable profile fields.
-
-**Authentication:** Required (Player only)
-
-**Request:**
-```json
-PUT /api/player/profile HTTP/1.1
-Host: api.spinta.com
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-Content-Type: application/json
-
-{
-  "player_name": "Marcus Silva",
-  "height": 182,
-  "profile_image_url": "https://storage.example.com/players/marcus-updated.jpg"
-}
-```
-
-**Editable Fields:**
-- `player_name`: Player's name (optional, 2-255 characters)
-- `height`: Player height in cm (optional, integer 100-250)
-- `profile_image_url`: Profile photo URL (optional, valid URL)
-
-**Non-editable Fields** (controlled by admin/system):
-- `jersey_number`
-- `position`
-- `birth_date`
-- `email` (requires separate email change flow)
-
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "player": {
-    "player_id": "player-uuid-1",
-    "player_name": "Marcus Silva",
-    "email": "marcus@email.com",
-    "jersey_number": 10,
-    "position": "Forward",
-    "height": 182,
-    "birth_date": "2008-03-20",
-    "profile_image_url": "https://storage.example.com/players/marcus-updated.jpg"
-  }
-}
-```
-
-**Database Queries:**
-
-```sql
--- Start transaction
-BEGIN;
-
--- 1. Update player record
-UPDATE players SET
-  player_name = COALESCE(:player_name, player_name),
-  height = COALESCE(:height, height),
-  profile_image_url = COALESCE(:profile_image_url, profile_image_url),
-  updated_at = NOW()
-WHERE player_id = :player_id_from_jwt;
-
--- 2. Update user full_name if player_name changed
-UPDATE users SET
-  full_name = :player_name,
-  updated_at = NOW()
-WHERE user_id = :player_id_from_jwt
-  AND :player_name IS NOT NULL;
-
-COMMIT;
-
--- 3. Return updated player data
-SELECT
-  p.player_id,
-  p.player_name,
-  u.email,
-  p.jersey_number,
-  p.position,
-  p.height,
-  p.birth_date,
-  p.profile_image_url
-FROM players p
-JOIN users u ON p.player_id = u.user_id
-WHERE p.player_id = :player_id_from_jwt;
-```
-
-**Validation:**
-- `player_name`: 2-255 characters if provided
-- `height`: Integer 100-250 if provided
-- `profile_image_url`: Valid URL if provided
-
-**Error Responses:**
-
-Validation Error (400):
-```json
-{
-  "detail": "Validation failed",
-  "errors": {
-    "height": "Height must be between 100 and 250 cm",
-    "profile_image_url": "Invalid URL format"
-  }
-}
 ```
 
 ---
@@ -992,18 +923,17 @@ Validation Error (400):
 
 ### Player Endpoints
 
-| Endpoint | Method | Purpose | Screen |
-|----------|--------|---------|--------|
-| `/api/player/dashboard` | GET | Player dashboard | Dashboard |
-| `/api/player/matches` | GET | List all matches | Matches List |
-| `/api/player/matches/{match_id}` | GET | Match details | Match Detail |
-| `/api/player/training` | GET | List training plans | Training List |
-| `/api/player/training/{plan_id}` | GET | Training plan details | Training Detail |
-| `/api/player/training/exercises/{exercise_id}/toggle` | PUT | Toggle exercise completion | Training Detail |
-| `/api/player/profile` | GET | View profile | Profile |
-| `/api/player/profile` | PUT | Update profile | Edit Profile |
+| Endpoint | Method | Purpose | Screen Reference |
+|----------|--------|---------|------------------|
+| `/api/player/dashboard` | GET | My Stats tab (attributes + season stats) | Page 25 |
+| `/api/player/matches` | GET | Matches list | Page 26 |
+| `/api/player/matches/{match_id}` | GET | Match detail (3 tabs) | Page 27 |
+| `/api/player/training` | GET | Training plans list | Page 28 |
+| `/api/player/training/{plan_id}` | GET | Training plan detail | Page 29 |
+| `/api/player/training/exercises/{exercise_id}/toggle` | PUT | Toggle exercise completion | Page 29 |
+| `/api/player/profile` | GET | View profile | Page 30 |
 
-**Total: 8 endpoints (GET /api/player/profile counted once)**
+**Total: 7 endpoints**
 
 ### Authorization Rules
 
@@ -1012,27 +942,36 @@ Validation Error (400):
    - Matches must include the player
    - Training plans must be assigned to the player
    - Profile is their own
-3. **Validation on every request:** Backend must verify player_id matches before returning data
+3. **Validation on every request:** Backend must verify player_id from JWT matches resource ownership
 
 ### Key Features
 
-1. **Read-Only Fields:** Players cannot edit:
-   - Jersey number (set by admin)
-   - Position (set by admin)
-   - Birth date (set during signup)
-   - Email (requires separate verification flow)
+1. **Bottom Navigation Structure:**
+   - My Stats: Attributes and season statistics by categories
+   - Matches: List and detail views with 3 internal tabs
+   - Training: List and detail views with checkboxes
+   - Profile: Personal information and club details
 
-2. **Editable Fields:** Players can edit:
-   - Name (synced with users.full_name)
-   - Height
-   - Profile photo
+2. **Statistics Categories:**
+   - GENERAL: Matches played
+   - ATTACKING: Goals, assists, xG, shots
+   - PASSING: Total passes, accuracy, key passes, crosses
+   - DRIBBLING: Total dribbles, success rate
+   - DEFENDING: Tackles, interceptions, success rates
 
 3. **Training Progress:**
    - Automatic status updates based on exercise completion
    - Progress percentage calculated in real-time
-   - Players can toggle exercises on/off
+   - Players can toggle exercises on/off with checkboxes
 
-4. **Statistics:**
-   - Match-level stats show individual performance
-   - Season averages for comparison
-   - Attributes displayed as radar chart in UI
+4. **Match Detail Tabs:**
+   - Summary: Goal scorers with minutes
+   - Statistics: Team comparison bars
+   - Lineup: Both teams' starting XI and substitutes
+
+### Key Differences from Coach View
+
+1. **Navigation:** Bottom nav bar instead of top tabs within screens
+2. **No AI Generation:** Players cannot create training plans (no "Create Training Plan Using AI" button)
+3. **Checkbox Toggles:** Players can check/uncheck exercises to mark completion
+4. **Simplified Dashboard:** Only "My Stats" content (no mixed content like club info or recent matches)
