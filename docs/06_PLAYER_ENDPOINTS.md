@@ -5,6 +5,7 @@
 This document details all API endpoints for the player-facing features of the Spinta platform. All endpoints require authentication with a valid JWT token and `user_type = "player"`.
 
 The player mobile app uses a bottom navigation bar with 4 tabs:
+
 - **My Stats**: Player's attributes and season statistics
 - **Matches**: List and details of all matches
 - **Training**: List and details of training plans
@@ -13,6 +14,7 @@ The player mobile app uses a bottom navigation bar with 4 tabs:
 ## Authentication
 
 All endpoints require:
+
 - **Header:** `Authorization: Bearer <jwt_token>`
 - **Token payload:** `user_type = "player"`
 
@@ -35,6 +37,7 @@ Unlike the coach view which uses top tabs within screens, the player view uses a
 **Authentication:** Required (Player only)
 
 **Request:**
+
 ```
 GET /api/player/dashboard HTTP/1.1
 Host: api.spinta.com
@@ -42,6 +45,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "player": {
@@ -149,6 +153,7 @@ WHERE player_id = :player_id_from_jwt;
 **Error Responses:**
 
 Unauthorized (401):
+
 ```json
 {
   "detail": "Authentication credentials were not provided."
@@ -156,6 +161,7 @@ Unauthorized (401):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "You do not have permission to perform this action."
@@ -177,10 +183,12 @@ Forbidden (403):
 **Authentication:** Required (Player only)
 
 **Query Parameters:**
+
 - `limit` (optional): Number of matches to return (default: 20, max: 100)
 - `offset` (optional): Number of matches to skip for pagination (default: 0)
 
 **Request:**
+
 ```
 GET /api/player/matches?limit=20&offset=0 HTTP/1.1
 Host: api.spinta.com
@@ -188,6 +196,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "total_count": 22,
@@ -195,36 +204,22 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     {
       "match_id": "match-uuid-1",
       "opponent_name": "City Strikers",
-      "opponent_logo_url": "https://storage.example.com/opponents/city-strikers.png",
       "match_date": "2025-10-08",
       "match_time": "15:30",
-      "result": "W",
       "home_score": 3,
       "away_score": 2,
       "is_home_match": true,
-      "player_stats": {
-        "goals": 2,
-        "assists": 1,
-        "shots": 6,
-        "shots_on_target": 4
-      }
+      "result": "W"
     },
     {
       "match_id": "match-uuid-2",
       "opponent_name": "North Athletic",
-      "opponent_logo_url": null,
       "match_date": "2025-10-01",
       "match_time": "14:00",
-      "result": "D",
       "home_score": 1,
       "away_score": 1,
       "is_home_match": true,
-      "player_stats": {
-        "goals": 1,
-        "assists": 0,
-        "shots": 5,
-        "shots_on_target": 3
-      }
+      "result": "D"
     }
   ]
 }
@@ -278,9 +273,11 @@ LIMIT :limit OFFSET :offset;
 **Authentication:** Required (Player only)
 
 **Path Parameters:**
+
 - `match_id` (required): UUID of the match
 
 **Request:**
+
 ```
 GET /api/player/matches/match-uuid-1 HTTP/1.1
 Host: api.spinta.com
@@ -288,6 +285,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "match": {
@@ -514,6 +512,7 @@ SELECT opponent_formation FROM matches WHERE match_id = :match_id;
 **Error Responses:**
 
 Not Found (404):
+
 ```json
 {
   "detail": "Match not found."
@@ -521,6 +520,7 @@ Not Found (404):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "You did not play in this match."
@@ -542,9 +542,11 @@ Forbidden (403):
 **Authentication:** Required (Player only)
 
 **Query Parameters:**
+
 - `status` (optional): Filter by status ('all', 'pending', 'in_progress', 'completed'). Default: 'all'
 
 **Request:**
+
 ```
 GET /api/player/training?status=all HTTP/1.1
 Host: api.spinta.com
@@ -552,6 +554,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "training_plans": [
@@ -612,9 +615,11 @@ ORDER BY
 **Authentication:** Required (Player only)
 
 **Path Parameters:**
+
 - `plan_id` (required): UUID of the training plan
 
 **Request:**
+
 ```
 GET /api/player/training/plan-uuid-1 HTTP/1.1
 Host: api.spinta.com
@@ -622,6 +627,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "plan": {
@@ -711,6 +717,7 @@ ORDER BY te.exercise_order;
 **Error Responses:**
 
 Not Found (404):
+
 ```json
 {
   "detail": "Training plan not found."
@@ -718,6 +725,7 @@ Not Found (404):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "This training plan is not assigned to you."
@@ -739,9 +747,11 @@ Forbidden (403):
 **Authentication:** Required (Player only)
 
 **Path Parameters:**
+
 - `exercise_id` (required): UUID of the exercise
 
 **Request:**
+
 ```json
 PUT /api/player/training/exercises/exercise-uuid-3/toggle HTTP/1.1
 Host: api.spinta.com
@@ -754,6 +764,7 @@ Content-Type: application/json
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "exercise_id": "exercise-uuid-3",
@@ -814,6 +825,7 @@ COMMIT;
 ```
 
 **Notes:**
+
 - Player can toggle exercises on and off (check/uncheck)
 - When exercise is marked complete: `completed = TRUE`, `completed_at = NOW()`
 - When exercise is unmarked: `completed = FALSE`, `completed_at = NULL`
@@ -825,6 +837,7 @@ COMMIT;
 **Error Responses:**
 
 Not Found (404):
+
 ```json
 {
   "detail": "Exercise not found."
@@ -832,6 +845,7 @@ Not Found (404):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "This exercise is not part of your training plan."
@@ -853,6 +867,7 @@ Forbidden (403):
 **Authentication:** Required (Player only)
 
 **Request:**
+
 ```
 GET /api/player/profile HTTP/1.1
 Host: api.spinta.com
@@ -860,6 +875,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "player": {
@@ -874,7 +890,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
   },
   "club": {
     "club_name": "Thunder United FC",
-    "logo_url": "https://storage.example.com/clubs/thunder-logo.png",
     "coach_name": "John Smith"
   },
   "season_summary": {
@@ -923,15 +938,15 @@ WHERE player_id = :player_id_from_jwt;
 
 ### Player Endpoints
 
-| Endpoint | Method | Purpose | Screen Reference |
-|----------|--------|---------|------------------|
-| `/api/player/dashboard` | GET | My Stats tab (attributes + season stats) | Page 25 |
-| `/api/player/matches` | GET | Matches list | Page 26 |
-| `/api/player/matches/{match_id}` | GET | Match detail (3 tabs) | Page 27 |
-| `/api/player/training` | GET | Training plans list | Page 28 |
-| `/api/player/training/{plan_id}` | GET | Training plan detail | Page 29 |
-| `/api/player/training/exercises/{exercise_id}/toggle` | PUT | Toggle exercise completion | Page 29 |
-| `/api/player/profile` | GET | View profile | Page 30 |
+| Endpoint                                              | Method | Purpose                                  | Screen Reference |
+| ----------------------------------------------------- | ------ | ---------------------------------------- | ---------------- |
+| `/api/player/dashboard`                               | GET    | My Stats tab (attributes + season stats) | Page 25          |
+| `/api/player/matches`                                 | GET    | Matches list                             | Page 26          |
+| `/api/player/matches/{match_id}`                      | GET    | Match detail (3 tabs)                    | Page 27          |
+| `/api/player/training`                                | GET    | Training plans list                      | Page 28          |
+| `/api/player/training/{plan_id}`                      | GET    | Training plan detail                     | Page 29          |
+| `/api/player/training/exercises/{exercise_id}/toggle` | PUT    | Toggle exercise completion               | Page 29          |
+| `/api/player/profile`                                 | GET    | View profile                             | Page 30          |
 
 **Total: 7 endpoints**
 
@@ -947,12 +962,14 @@ WHERE player_id = :player_id_from_jwt;
 ### Key Features
 
 1. **Bottom Navigation Structure:**
+
    - My Stats: Attributes and season statistics by categories
    - Matches: List and detail views with 3 internal tabs
    - Training: List and detail views with checkboxes
    - Profile: Personal information and club details
 
 2. **Statistics Categories:**
+
    - GENERAL: Matches played
    - ATTACKING: Goals, assists, xG, shots
    - PASSING: Total passes, accuracy, key passes, crosses
@@ -960,6 +977,7 @@ WHERE player_id = :player_id_from_jwt;
    - DEFENDING: Tackles, interceptions, success rates
 
 3. **Training Progress:**
+
    - Automatic status updates based on exercise completion
    - Progress percentage calculated in real-time
    - Players can toggle exercises on/off with checkboxes

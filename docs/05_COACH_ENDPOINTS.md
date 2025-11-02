@@ -7,6 +7,7 @@ This document details all API endpoints for the coach-facing features of the Spi
 ## Authentication
 
 All endpoints require:
+
 - **Header:** `Authorization: Bearer <jwt_token>`
 - **Token payload:** `user_type = "coach"`
 
@@ -29,10 +30,12 @@ For detailed authentication flow and endpoints, see `04_AUTHENTICATION.md` and `
 **Authentication:** Required (Coach only)
 
 **Query Parameters:**
+
 - `matches_limit` (optional): Number of matches to return in matches list (default: 20, max: 100)
 - `matches_offset` (optional): Number of matches to skip for pagination (default: 0)
 
 **Request:**
+
 ```
 GET /api/coach/dashboard?matches_limit=20&matches_offset=0 HTTP/1.1
 Host: api.spinta.com
@@ -40,27 +43,21 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "coach": {
-    "full_name": "John Smith",
-    "email": "john@email.com"
+    "full_name": "John Smith"
   },
   "club": {
     "club_id": "550e8400-e29b-41d4-a716-446655440000",
     "club_name": "Thunder United FC",
-    "logo_url": "https://storage.example.com/clubs/thunder-logo.png",
-    "age_group": "U16",
-    "stadium": "City Stadium",
-    "country": "United States"
+    "logo_url": "https://storage.example.com/clubs/thunder-logo.png"
   },
   "season_record": {
     "wins": 14,
     "draws": 4,
-    "losses": 4,
-    "goals_scored": 45,
-    "goals_conceded": 23,
-    "total_clean_sheets": 8
+    "losses": 4
   },
   "team_form": "WWDLW",
   "matches": {
@@ -69,7 +66,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       {
         "match_id": "match-uuid-1",
         "opponent_name": "City Strikers",
-        "opponent_logo_url": "https://storage.example.com/opponents/city-strikers.png",
         "match_date": "2025-10-08",
         "match_time": "15:30",
         "home_score": 3,
@@ -80,7 +76,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       {
         "match_id": "match-uuid-2",
         "opponent_name": "North Athletic",
-        "opponent_logo_url": null,
         "match_date": "2025-10-01",
         "match_time": "14:00",
         "home_score": 1,
@@ -211,6 +206,7 @@ LIMIT :matches_limit OFFSET :matches_offset;
 **Error Responses:**
 
 Unauthorized (401):
+
 ```json
 {
   "detail": "Authentication credentials were not provided."
@@ -218,6 +214,7 @@ Unauthorized (401):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "You do not have permission to perform this action."
@@ -239,9 +236,11 @@ Forbidden (403):
 **Authentication:** Required (Coach only)
 
 **Path Parameters:**
+
 - `match_id` (required): UUID of the match
 
 **Request:**
+
 ```
 GET /api/coach/matches/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1
 Host: api.spinta.com
@@ -249,6 +248,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "match": {
@@ -660,6 +660,7 @@ ORDER BY op.jersey_number;
 **Error Responses:**
 
 Not Found (404):
+
 ```json
 {
   "detail": "Match not found."
@@ -667,6 +668,7 @@ Not Found (404):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "This match does not belong to your club."
@@ -688,6 +690,7 @@ Forbidden (403):
 **Authentication:** Required (Coach only)
 
 **Request:**
+
 ```
 GET /api/coach/players HTTP/1.1
 Host: api.spinta.com
@@ -695,6 +698,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "summary": {
@@ -785,9 +789,11 @@ ORDER BY jersey_number;
 **Authentication:** Required (Coach only)
 
 **Path Parameters:**
+
 - `player_id` (required): UUID of the player
 
 **Request:**
+
 ```
 GET /api/coach/players/player-uuid-1 HTTP/1.1
 Host: api.spinta.com
@@ -795,6 +801,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "player": {
@@ -803,7 +810,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "jersey_number": 10,
     "position": "Forward",
     "height": 180,
-    "birth_date": "2008-03-20",
     "age": "23 years",
     "profile_image_url": "https://storage.example.com/players/marcus.jpg",
     "is_linked": true
@@ -892,6 +898,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **For Unlinked Player (with invite code):**
+
 ```json
 {
   "player": {
@@ -900,7 +907,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "jersey_number": 23,
     "position": "Forward",
     "height": null,
-    "birth_date": null,
     "age": null,
     "profile_image_url": null,
     "is_linked": false
@@ -1015,6 +1021,7 @@ ORDER BY created_at DESC;
 **Error Responses:**
 
 Not Found (404):
+
 ```json
 {
   "detail": "Player not found."
@@ -1022,6 +1029,7 @@ Not Found (404):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "This player does not belong to your club."
@@ -1043,10 +1051,12 @@ Forbidden (403):
 **Authentication:** Required (Coach only)
 
 **Path Parameters:**
+
 - `player_id` (required): UUID of the player
 - `match_id` (required): UUID of the match
 
 **Request:**
+
 ```
 GET /api/coach/players/player-uuid-1/matches/match-uuid-1 HTTP/1.1
 Host: api.spinta.com
@@ -1054,6 +1064,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "match": {
@@ -1165,6 +1176,7 @@ WHERE pms.match_id = :match_id
 **Authentication:** Required (Coach only)
 
 **Request:**
+
 ```json
 POST /api/coach/training-plans/generate-ai HTTP/1.1
 Host: api.spinta.com
@@ -1177,6 +1189,7 @@ Content-Type: application/json
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "player_name": "Marcus Silva",
@@ -1210,6 +1223,7 @@ Content-Type: application/json
 ```
 
 **Notes:**
+
 - AI implementation details are not included in this documentation
 - The endpoint will use AI to analyze player statistics and generate appropriate training recommendations
 - Coach can then add more exercises and notes before submitting via the Create Training Plan endpoint
@@ -1229,6 +1243,7 @@ Content-Type: application/json
 **Authentication:** Required (Coach only)
 
 **Request:**
+
 ```json
 POST /api/coach/training-plans HTTP/1.1
 Host: api.spinta.com
@@ -1270,6 +1285,7 @@ Content-Type: application/json
 ```
 
 **Validation:**
+
 - `player_id`: Required, must exist and belong to coach's club
 - `plan_name`: Required, 2-255 characters
 - `duration`: Optional, string
@@ -1283,6 +1299,7 @@ Content-Type: application/json
 - `exercise.exercise_order`: Required, integer (for ordering)
 
 **Response (201 Created):**
+
 ```json
 {
   "plan_id": "plan-uuid-1",
@@ -1363,6 +1380,7 @@ COMMIT;
 **Error Responses:**
 
 Player Not Found (404):
+
 ```json
 {
   "detail": "Player not found."
@@ -1370,6 +1388,7 @@ Player Not Found (404):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "This player does not belong to your club."
@@ -1377,6 +1396,7 @@ Forbidden (403):
 ```
 
 Validation Error (400):
+
 ```json
 {
   "detail": "Validation failed",
@@ -1402,9 +1422,11 @@ Validation Error (400):
 **Authentication:** Required (Coach only)
 
 **Path Parameters:**
+
 - `plan_id` (required): UUID of the training plan
 
 **Request:**
+
 ```
 GET /api/coach/training-plans/plan-uuid-1 HTTP/1.1
 Host: api.spinta.com
@@ -1412,6 +1434,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "plan": {
@@ -1572,6 +1595,7 @@ WHERE plan_id = :plan_id;
 **Error Responses:**
 
 Not Found (404):
+
 ```json
 {
   "detail": "Training plan not found."
@@ -1579,6 +1603,7 @@ Not Found (404):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "This training plan does not belong to your club."
@@ -1598,9 +1623,11 @@ Forbidden (403):
 **Authentication:** Required (Coach only)
 
 **Path Parameters:**
+
 - `plan_id` (required): UUID of the training plan
 
 **Request:**
+
 ```json
 PUT /api/coach/training-plans/plan-uuid-1 HTTP/1.1
 Host: api.spinta.com
@@ -1634,11 +1661,13 @@ Content-Type: application/json
 ```
 
 **Notes:**
+
 - Exercises with `exercise_id` are updated
 - Exercises without `exercise_id` are created
 - Exercises not in the request are deleted
 
 **Response (200 OK):**
+
 ```json
 {
   "plan_id": "plan-uuid-1",
@@ -1708,9 +1737,11 @@ COMMIT;
 **Authentication:** Required (Coach only)
 
 **Path Parameters:**
+
 - `plan_id` (required): UUID of the training plan
 
 **Request:**
+
 ```
 DELETE /api/coach/training-plans/plan-uuid-1 HTTP/1.1
 Host: api.spinta.com
@@ -1718,6 +1749,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "deleted": true,
@@ -1745,6 +1777,7 @@ WHERE plan_id = :plan_id;
 **Error Responses:**
 
 Not Found (404):
+
 ```json
 {
   "detail": "Training plan not found."
@@ -1752,6 +1785,7 @@ Not Found (404):
 ```
 
 Forbidden (403):
+
 ```json
 {
   "detail": "This training plan does not belong to your club."
@@ -1764,18 +1798,18 @@ Forbidden (403):
 
 ### Coach Endpoints
 
-| Endpoint | Method | Purpose | Screen |
-|----------|--------|---------|--------|
-| `/api/coach/dashboard` | GET | Coach dashboard with 2 tabs (Summary, Statistics) | Dashboard |
-| `/api/coach/matches/{match_id}` | GET | Match details with 3 tabs (Summary, Statistics, Lineup) | Match Detail |
-| `/api/coach/players` | GET | List all players with summary counts | Players List |
-| `/api/coach/players/{player_id}` | GET | Player details with 3 tabs (Summary, Matches, Training) | Player Detail |
-| `/api/coach/players/{player_id}/matches/{match_id}` | GET | Player's performance in specific match | Player Match Detail |
-| `/api/coach/training-plans/generate-ai` | POST | Generate AI training plan | AI Generation |
-| `/api/coach/training-plans` | POST | Create training plan | Create Training Plan |
-| `/api/coach/training-plans/{plan_id}` | GET | Training plan details | Training Plan Detail |
-| `/api/coach/training-plans/{plan_id}` | PUT | Update training plan | Edit Training Plan |
-| `/api/coach/training-plans/{plan_id}` | DELETE | Delete training plan | Training Plan Management |
+| Endpoint                                            | Method | Purpose                                                 | Screen                   |
+| --------------------------------------------------- | ------ | ------------------------------------------------------- | ------------------------ |
+| `/api/coach/dashboard`                              | GET    | Coach dashboard with 2 tabs (Summary, Statistics)       | Dashboard                |
+| `/api/coach/matches/{match_id}`                     | GET    | Match details with 3 tabs (Summary, Statistics, Lineup) | Match Detail             |
+| `/api/coach/players`                                | GET    | List all players with summary counts                    | Players List             |
+| `/api/coach/players/{player_id}`                    | GET    | Player details with 3 tabs (Summary, Matches, Training) | Player Detail            |
+| `/api/coach/players/{player_id}/matches/{match_id}` | GET    | Player's performance in specific match                  | Player Match Detail      |
+| `/api/coach/training-plans/generate-ai`             | POST   | Generate AI training plan                               | AI Generation            |
+| `/api/coach/training-plans`                         | POST   | Create training plan                                    | Create Training Plan     |
+| `/api/coach/training-plans/{plan_id}`               | GET    | Training plan details                                   | Training Plan Detail     |
+| `/api/coach/training-plans/{plan_id}`               | PUT    | Update training plan                                    | Edit Training Plan       |
+| `/api/coach/training-plans/{plan_id}`               | DELETE | Delete training plan                                    | Training Plan Management |
 
 **Total: 10 endpoints**
 
@@ -1791,20 +1825,24 @@ Forbidden (403):
 ### Key Features
 
 1. **Dashboard with Tabs:**
+
    - Summary tab: Season record, team form, ALL matches (with pagination)
    - Statistics tab: Organized by categories (Season Summary, Attacking, Passes, Defending)
 
 2. **Match Detail with Tabs:**
+
    - Summary tab: Goal scorers with team names for color coding
    - Statistics tab: Comparison bars for both teams
    - Lineup tab: Both teams' starting XI with jersey numbers
 
 3. **Player Detail with Tabs:**
+
    - Summary tab: Attributes radar chart + season statistics by category
    - Matches tab: Recent 5 matches
    - Training tab: List of training plans with status
 
 4. **AI Training Plan Generation:**
+
    - Generate button sends request to AI endpoint
    - Returns pre-filled form data (plan name, duration, exercises)
    - Coach can edit before final submission
