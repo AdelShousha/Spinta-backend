@@ -848,38 +848,61 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "interception_success_rate": 81
     }
   },
-  "recent_matches": [
-    {
-      "match_id": "match-uuid-1",
-      "opponent_name": "City Strikers",
-      "match_date": "2025-10-08",
-      "result": "W"
-    },
-    {
-      "match_id": "match-uuid-2",
-      "opponent_name": "North Athletic",
-      "match_date": "2025-10-01",
-      "result": "D"
-    },
-    {
-      "match_id": "match-uuid-3",
-      "opponent_name": "Valley Rangers",
-      "match_date": "2025-10-01",
-      "result": "W"
-    },
-    {
-      "match_id": "match-uuid-4",
-      "opponent_name": "Harbor FC",
-      "match_date": "2025-09-28",
-      "result": "L"
-    },
-    {
-      "match_id": "match-uuid-5",
-      "opponent_name": "Phoenix United",
-      "match_date": "2025-09-24",
-      "result": "W"
-    }
-  ],
+  "recent_matches": {
+    "total_count": 5,
+    "matches": [
+      {
+        "match_id": "match-uuid-1",
+        "opponent_name": "City Strikers",
+        "match_date": "2025-10-08",
+        "match_time": "15:30",
+        "home_score": 3,
+        "away_score": 2,
+        "is_home_match": true,
+        "result": "W"
+      },
+      {
+        "match_id": "match-uuid-2",
+        "opponent_name": "North Athletic",
+        "match_date": "2025-10-01",
+        "match_time": "14:00",
+        "home_score": 1,
+        "away_score": 1,
+        "is_home_match": false,
+        "result": "D"
+      },
+      {
+        "match_id": "match-uuid-3",
+        "opponent_name": "Valley Rangers",
+        "match_date": "2025-10-01",
+        "match_time": "16:00",
+        "home_score": 2,
+        "away_score": 0,
+        "is_home_match": true,
+        "result": "W"
+      },
+      {
+        "match_id": "match-uuid-4",
+        "opponent_name": "Harbor FC",
+        "match_date": "2025-09-28",
+        "match_time": "15:00",
+        "home_score": 1,
+        "away_score": 3,
+        "is_home_match": true,
+        "result": "L"
+      },
+      {
+        "match_id": "match-uuid-5",
+        "opponent_name": "Phoenix United",
+        "match_date": "2025-09-24",
+        "match_time": "14:30",
+        "home_score": 4,
+        "away_score": 1,
+        "is_home_match": false,
+        "result": "W"
+      }
+    ]
+  },
   "training_plans": [
     {
       "plan_id": "plan-uuid-1",
@@ -945,7 +968,41 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "interception_success_rate": 73
     }
   },
-  "recent_matches": [],
+  "recent_matches": {
+    "total_count": 3,
+    "matches": [
+      {
+        "match_id": "match-uuid-10",
+        "opponent_name": "City Strikers",
+        "match_date": "2025-10-08",
+        "match_time": "15:30",
+        "home_score": 3,
+        "away_score": 2,
+        "is_home_match": true,
+        "result": "W"
+      },
+      {
+        "match_id": "match-uuid-11",
+        "opponent_name": "North Athletic",
+        "match_date": "2025-10-01",
+        "match_time": "14:00",
+        "home_score": 1,
+        "away_score": 1,
+        "is_home_match": false,
+        "result": "D"
+      },
+      {
+        "match_id": "match-uuid-12",
+        "opponent_name": "Valley Rangers",
+        "match_date": "2025-09-24",
+        "match_time": "16:00",
+        "home_score": 2,
+        "away_score": 1,
+        "is_home_match": true,
+        "result": "W"
+      }
+    ]
+  },
   "training_plans": []
 }
 ```
@@ -960,7 +1017,6 @@ SELECT
   p.jersey_number,
   p.position,
   p.height,
-  p.birth_date,
   p.profile_image_url,
   p.is_linked,
   p.invite_code,
@@ -993,6 +1049,10 @@ SELECT
   m.match_id,
   m.opponent_name,
   m.match_date,
+  m.match_time,
+  m.home_score,
+  m.away_score,
+  m.is_home_match,
   CASE
     WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
     WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
@@ -1000,7 +1060,8 @@ SELECT
     WHEN NOT m.is_home_match AND m.away_score > m.home_score THEN 'W'
     WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
     ELSE 'D'
-  END as result
+  END as result,
+  COUNT(*) OVER() as total_count
 FROM player_match_statistics pms
 JOIN matches m ON pms.match_id = m.match_id
 WHERE pms.player_id = :player_id
@@ -1040,13 +1101,13 @@ Forbidden (403):
 
 ## 5. Player Match Detail (Coach View)
 
-**UI Purpose:** Display player's individual performance in a specific match.
+**UI Purpose:** Display player's individual performance in a specific match - simple page showing match header, player summary (goals/assists), and statistics sections.
 
 **UI Reference:** Page 15 in Spinta UI.pdf
 
 ### GET /api/coach/players/{player_id}/matches/{match_id}
 
-**Description:** Returns detailed player statistics for a specific match.
+**Description:** Returns detailed player statistics for a specific match. This is a simple page format (not tabbed) showing match info, player summary, and categorized statistics.
 
 **Authentication:** Required (Coach only)
 
@@ -1075,6 +1136,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "opponent_logo_url": "https://storage.example.com/opponents/city-strikers.png",
     "home_score": 3,
     "away_score": 2,
+    "is_home_match": true,
     "result": "W"
   },
   "player_summary": {
@@ -1122,6 +1184,7 @@ SELECT
   oc.logo_url as opponent_logo_url,
   m.home_score,
   m.away_score,
+  m.is_home_match,
   CASE
     WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
     WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
@@ -1132,7 +1195,8 @@ SELECT
   END as result
 FROM matches m
 LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
-WHERE m.match_id = :match_id;
+WHERE m.match_id = :match_id
+  AND m.club_id = :club_id_from_jwt;
 
 -- 2. Player match stats
 SELECT
@@ -1163,7 +1227,115 @@ WHERE pms.match_id = :match_id
 
 ---
 
-## 6. Generate AI Training Plan
+## 6. Coach Profile Screen
+
+**UI Purpose:** Display coach profile information with club logo, personal details, and club statistics.
+
+**UI Reference:** Page 20 in Spinta UI.pdf
+
+### GET /api/coach/profile
+
+**Description:** Returns coach profile data including personal information, club details, and aggregated club statistics.
+
+**Authentication:** Required (Coach only)
+
+**Request:**
+
+```
+GET /api/coach/profile HTTP/1.1
+Host: api.spinta.com
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "coach": {
+    "full_name": "John Smith",
+    "email": "john@example.com",
+    "gender": "Male",
+    "birth_date": "2005-08-01"
+  },
+  "club": {
+    "club_name": "Thunder United FC",
+    "logo_url": "https://storage.example.com/clubs/thunder-logo.png"
+  },
+  "club_stats": {
+    "total_players": 3,
+    "total_matches": 22,
+    "win_rate_percentage": 64
+  }
+}
+```
+
+**Database Queries:**
+
+```sql
+-- 1. Get coach info
+SELECT
+  u.full_name,
+  u.email,
+  u.gender,
+  u.birth_date
+FROM users u
+WHERE u.user_id = :user_id_from_jwt;
+
+-- 2. Get club info
+SELECT
+  c.club_name,
+  c.logo_url
+FROM clubs c
+JOIN coaches co ON c.coach_id = co.coach_id
+WHERE co.coach_id = :user_id_from_jwt;
+
+-- 3. Get club statistics
+-- Total players (linked players only)
+SELECT COUNT(*) as total_players
+FROM players
+WHERE club_id = :club_id
+  AND is_linked = TRUE;
+
+-- Total matches
+SELECT COUNT(*) as total_matches
+FROM matches
+WHERE club_id = :club_id
+  AND home_score IS NOT NULL;
+
+-- Calculate win rate
+SELECT
+  ROUND(
+    (COUNT(*) FILTER (
+      WHERE (is_home_match AND home_score > away_score)
+         OR (NOT is_home_match AND away_score > home_score)
+    ) * 100.0 / NULLIF(COUNT(*), 0))
+  ) as win_rate_percentage
+FROM matches
+WHERE club_id = :club_id
+  AND home_score IS NOT NULL;
+```
+
+**Error Responses:**
+
+Unauthorized (401):
+
+```json
+{
+  "detail": "Authentication credentials were not provided."
+}
+```
+
+Forbidden (403):
+
+```json
+{
+  "detail": "You do not have permission to perform this action."
+}
+```
+
+---
+
+## 7. Generate AI Training Plan
 
 **UI Purpose:** When "Create Training Plan Using AI" button is clicked, generate a training plan using AI.
 
@@ -1230,7 +1402,7 @@ Content-Type: application/json
 
 ---
 
-## 7. Create Training Plan
+## 8. Create Training Plan
 
 **UI Purpose:** Create a new training plan for a player (after coach reviews/edits AI-generated or manually creates).
 
@@ -1409,7 +1581,7 @@ Validation Error (400):
 
 ---
 
-## 8. Training Plan Detail (Coach View)
+## 9. Training Plan Detail (Coach View)
 
 **UI Purpose:** Display detailed view of a training plan when clicking from the player's training tab.
 
@@ -1612,7 +1784,7 @@ Forbidden (403):
 
 ---
 
-## 9. Update Training Plan
+## 10. Update Training Plan
 
 **UI Purpose:** Edit existing training plan.
 
@@ -1726,7 +1898,7 @@ COMMIT;
 
 ---
 
-## 10. Delete Training Plan
+## 11. Delete Training Plan
 
 **UI Purpose:** Allow coach to delete training plan.
 
@@ -1805,13 +1977,14 @@ Forbidden (403):
 | `/api/coach/players`                                | GET    | List all players with summary counts                    | Players List             |
 | `/api/coach/players/{player_id}`                    | GET    | Player details with 3 tabs (Summary, Matches, Training) | Player Detail            |
 | `/api/coach/players/{player_id}/matches/{match_id}` | GET    | Player's performance in specific match                  | Player Match Detail      |
+| `/api/coach/profile`                                | GET    | Coach profile with club stats                           | Coach Profile            |
 | `/api/coach/training-plans/generate-ai`             | POST   | Generate AI training plan                               | AI Generation            |
 | `/api/coach/training-plans`                         | POST   | Create training plan                                    | Create Training Plan     |
 | `/api/coach/training-plans/{plan_id}`               | GET    | Training plan details                                   | Training Plan Detail     |
 | `/api/coach/training-plans/{plan_id}`               | PUT    | Update training plan                                    | Edit Training Plan       |
 | `/api/coach/training-plans/{plan_id}`               | DELETE | Delete training plan                                    | Training Plan Management |
 
-**Total: 10 endpoints**
+**Total: 11 endpoints**
 
 ### Authorization Rules
 

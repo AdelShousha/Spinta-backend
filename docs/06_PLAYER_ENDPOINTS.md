@@ -53,6 +53,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "player_name": "Marcus Silva",
     "jersey_number": 10,
     "position": "Forward",
+    "height": 180,
+    "age": "23 years",
     "profile_image_url": "https://storage.example.com/players/marcus.jpg"
   },
   "attributes": {
@@ -105,6 +107,8 @@ SELECT
   player_name,
   jersey_number,
   position,
+  height,
+  birth_date,
   profile_image_url
 FROM players
 WHERE player_id = :player_id_from_jwt;
@@ -148,6 +152,9 @@ SELECT
   interception_success_rate
 FROM player_season_statistics
 WHERE player_id = :player_id_from_jwt;
+
+-- Calculate age from birth_date (in application layer):
+-- age = FLOOR(EXTRACT(YEAR FROM AGE(CURRENT_DATE, birth_date))) || ' years'
 ```
 
 **Error Responses:**
@@ -264,11 +271,11 @@ LIMIT :limit OFFSET :offset;
 
 **UI Reference:** Page 27 in Spinta UI.pdf
 
-**UI Purpose:** Display detailed statistics for a specific match with 3 internal tabs: Summary, Statistics, and Lineup.
+**UI Purpose:** Display player's individual performance in a specific match - simple page showing match header, player summary (goals/assists), and statistics sections. This is identical to the coach's view of player match detail (Page 15).
 
 ### GET /api/player/matches/{match_id}
 
-**Description:** Returns complete match details with 3 tabs of data (same structure as coach view but for player perspective).
+**Description:** Returns player's detailed statistics for a specific match. This is a simple page format (not tabbed) showing match info, player summary, and categorized statistics.
 
 **Authentication:** Required (Player only)
 
@@ -290,109 +297,43 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 {
   "match": {
     "match_id": "match-uuid-1",
-    "opponent_name": "City Strikers",
-    "opponent_logo_url": "https://storage.example.com/opponents/city-strikers.png",
     "match_date": "2025-10-08",
     "match_time": "15:30",
-    "result": "W",
+    "opponent_name": "City Strikers",
+    "opponent_logo_url": "https://storage.example.com/opponents/city-strikers.png",
     "home_score": 3,
     "away_score": 2,
     "is_home_match": true,
-    "club_name": "Thunder United FC",
-    "club_logo_url": "https://storage.example.com/clubs/thunder-logo.png"
+    "result": "W"
   },
-  "summary": {
-    "goal_scorers": {
-      "home_goals": [
-        {
-          "player_id": "player-uuid-1",
-          "player_name": "Marcus Silva",
-          "jersey_number": 10,
-          "goals": 2,
-          "minutes": [23, 67]
-        },
-        {
-          "player_id": "player-uuid-2",
-          "player_name": "David Chen",
-          "jersey_number": 7,
-          "goals": 1,
-          "minutes": [45]
-        }
-      ],
-      "away_goals": [
-        {
-          "player_id": "opponent-player-uuid-1",
-          "player_name": "James Wilson",
-          "jersey_number": 9,
-          "goals": 2,
-          "minutes": [34, 78]
-        }
-      ]
-    }
+  "player_summary": {
+    "player_name": "Marcus Silva",
+    "goals": 2,
+    "assists": 1
   },
   "statistics": {
-    "home_team": {
-      "possession": 58,
-      "shots": 18,
-      "shots_on_target": 12,
-      "corners": 7,
-      "fouls": 11,
-      "yellow_cards": 2,
-      "red_cards": 0,
-      "passes": 487,
-      "pass_accuracy": 84
+    "attacking": {
+      "goals": 2,
+      "assists": 1,
+      "xg": 1.8,
+      "total_shots": 6,
+      "shots_on_target": 4,
+      "total_dribbles": 9,
+      "successful_dribbles": 7
     },
-    "away_team": {
-      "possession": 42,
-      "shots": 11,
-      "shots_on_target": 6,
-      "corners": 4,
-      "fouls": 14,
-      "yellow_cards": 3,
-      "red_cards": 0,
-      "passes": 352,
-      "pass_accuracy": 78
-    }
-  },
-  "lineup": {
-    "home_team": {
-      "team_name": "Thunder United FC",
-      "formation": "4-3-3",
-      "starting_xi": [
-        {
-          "player_id": "player-uuid-1",
-          "player_name": "Marcus Silva",
-          "jersey_number": 10,
-          "position": "Forward"
-        },
-        {
-          "player_id": "player-uuid-2",
-          "player_name": "David Chen",
-          "jersey_number": 7,
-          "position": "Midfielder"
-        }
-      ],
-      "substitutes": [
-        {
-          "player_id": "player-uuid-5",
-          "player_name": "Lucas Brown",
-          "jersey_number": 15,
-          "position": "Forward"
-        }
-      ]
+    "passing": {
+      "total_passes": 52,
+      "passes_completed": 46,
+      "short_passes": 38,
+      "long_passes": 14,
+      "final_third": 18,
+      "crosses": 5
     },
-    "away_team": {
-      "team_name": "City Strikers",
-      "formation": "4-4-2",
-      "starting_xi": [
-        {
-          "player_id": "opponent-player-uuid-1",
-          "player_name": "James Wilson",
-          "jersey_number": 9,
-          "position": "Forward"
-        }
-      ],
-      "substitutes": []
+    "defending": {
+      "tackles": 5,
+      "tackle_success_rate": 80,
+      "interceptions": 5,
+      "interception_success_rate": 83
     }
   }
 }
@@ -401,18 +342,16 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 **Database Queries:**
 
 ```sql
--- 1. Match basic info
+-- 1. Match info
 SELECT
   m.match_id,
-  m.opponent_name,
-  oc.logo_url as opponent_logo_url,
   m.match_date,
   m.match_time,
+  m.opponent_name,
+  oc.logo_url as opponent_logo_url,
   m.home_score,
   m.away_score,
   m.is_home_match,
-  c.club_name,
-  c.logo_url as club_logo_url,
   CASE
     WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
     WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
@@ -423,90 +362,33 @@ SELECT
   END as result
 FROM matches m
 LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
-JOIN clubs c ON m.club_id = c.club_id
 WHERE m.match_id = :match_id
   AND m.club_id = (SELECT club_id FROM players WHERE player_id = :player_id_from_jwt);
 
--- 2. Summary tab - Goal scorers (home team)
+-- 2. Player match stats
 SELECT
-  p.player_id,
   p.player_name,
-  p.jersey_number,
-  COUNT(*) as goals,
-  ARRAY_AGG(me.minute ORDER BY me.minute) as minutes
-FROM match_events me
-JOIN players p ON me.player_id = p.player_id
-WHERE me.match_id = :match_id
-  AND me.event_type = 'Shot'
-  AND me.outcome = 'Goal'
-  AND me.is_home_team = TRUE
-GROUP BY p.player_id, p.player_name, p.jersey_number
-ORDER BY MIN(me.minute);
-
--- 3. Summary tab - Goal scorers (away team)
-SELECT
-  op.player_id,
-  op.player_name,
-  op.jersey_number,
-  COUNT(*) as goals,
-  ARRAY_AGG(me.minute ORDER BY me.minute) as minutes
-FROM match_events me
-JOIN opponent_players op ON me.player_id = op.player_id
-WHERE me.match_id = :match_id
-  AND me.event_type = 'Shot'
-  AND me.outcome = 'Goal'
-  AND me.is_home_team = FALSE
-GROUP BY op.player_id, op.player_name, op.jersey_number
-ORDER BY MIN(me.minute);
-
--- 4. Statistics tab - Team statistics
-SELECT
-  ms.match_id,
-  ms.possession,
-  ms.shots,
-  ms.shots_on_target,
-  ms.corners,
-  ms.fouls,
-  ms.yellow_cards,
-  ms.red_cards,
-  ms.passes,
-  ms.pass_accuracy
-FROM match_statistics ms
-WHERE ms.match_id = :match_id;
-
--- 5. Lineup tab - Home team lineup
-SELECT
-  p.player_id,
-  p.player_name,
-  p.jersey_number,
-  p.position,
-  ml.lineup_type  -- 'starting' or 'substitute'
-FROM match_lineups ml
-JOIN players p ON ml.player_id = p.player_id
-WHERE ml.match_id = :match_id
-  AND ml.is_home_team = TRUE
-ORDER BY
-  CASE ml.lineup_type WHEN 'starting' THEN 1 ELSE 2 END,
-  p.jersey_number;
-
--- 6. Lineup tab - Away team lineup
-SELECT
-  op.player_id,
-  op.player_name,
-  op.jersey_number,
-  op.position,
-  ml.lineup_type
-FROM match_lineups ml
-JOIN opponent_players op ON ml.player_id = op.player_id
-WHERE ml.match_id = :match_id
-  AND ml.is_home_team = FALSE
-ORDER BY
-  CASE ml.lineup_type WHEN 'starting' THEN 1 ELSE 2 END,
-  op.jersey_number;
-
--- 7. Team formations
-SELECT formation FROM matches WHERE match_id = :match_id;
-SELECT opponent_formation FROM matches WHERE match_id = :match_id;
+  pms.goals,
+  pms.assists,
+  pms.expected_goals as xg,
+  pms.shots as total_shots,
+  pms.shots_on_target,
+  pms.total_dribbles,
+  pms.successful_dribbles,
+  pms.total_passes,
+  pms.completed_passes as passes_completed,
+  pms.short_passes,
+  pms.long_passes,
+  pms.final_third_passes as final_third,
+  pms.crosses,
+  pms.tackles,
+  pms.tackle_success_rate,
+  pms.interceptions,
+  pms.interception_success_rate
+FROM player_match_statistics pms
+JOIN players p ON pms.player_id = p.player_id
+WHERE pms.match_id = :match_id
+  AND pms.player_id = :player_id_from_jwt;
 ```
 
 **Error Responses:**
@@ -523,7 +405,7 @@ Forbidden (403):
 
 ```json
 {
-  "detail": "You did not play in this match."
+  "detail": "This match does not belong to your club or you did not play in this match."
 }
 ```
 
@@ -914,7 +796,6 @@ SELECT
   p.birth_date,
   p.profile_image_url,
   c.club_name,
-  c.logo_url as club_logo,
   coach_user.full_name as coach_name
 FROM players p
 JOIN users u ON p.player_id = u.user_id
@@ -942,7 +823,7 @@ WHERE player_id = :player_id_from_jwt;
 | ----------------------------------------------------- | ------ | ---------------------------------------- | ---------------- |
 | `/api/player/dashboard`                               | GET    | My Stats tab (attributes + season stats) | Page 25          |
 | `/api/player/matches`                                 | GET    | Matches list                             | Page 26          |
-| `/api/player/matches/{match_id}`                      | GET    | Match detail (3 tabs)                    | Page 27          |
+| `/api/player/matches/{match_id}`                      | GET    | Player match detail (simple page)        | Page 27          |
 | `/api/player/training`                                | GET    | Training plans list                      | Page 28          |
 | `/api/player/training/{plan_id}`                      | GET    | Training plan detail                     | Page 29          |
 | `/api/player/training/exercises/{exercise_id}/toggle` | PUT    | Toggle exercise completion               | Page 29          |
@@ -982,10 +863,9 @@ WHERE player_id = :player_id_from_jwt;
    - Progress percentage calculated in real-time
    - Players can toggle exercises on/off with checkboxes
 
-4. **Match Detail Tabs:**
-   - Summary: Goal scorers with minutes
-   - Statistics: Team comparison bars
-   - Lineup: Both teams' starting XI and substitutes
+4. **Match Detail Format:**
+   - Simple page showing match header, player summary (goals/assists), and categorized statistics
+   - Identical structure to coach's view of player match detail (Page 15)
 
 ### Key Differences from Coach View
 
