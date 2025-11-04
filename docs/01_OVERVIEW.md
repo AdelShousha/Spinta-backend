@@ -165,6 +165,16 @@ This guide is organized into the following sections:
 - Automatically populated from first match upload
 - Enables accurate event-to-team mapping
 
+### 9. Client-Side Logout
+**Decision**: Implement logout on the client side by removing the JWT token from storage; no server-side logout endpoint.
+
+**Rationale**:
+- Supports stateless JWT architecture
+- No need for token blacklist or session management
+- Simpler implementation and lower server overhead
+- Standard practice for JWT-based mobile applications
+- Tokens remain valid until client removes them
+
 ## Data Flow
 
 ### Match Processing Flow (Admin Panel)
@@ -404,20 +414,25 @@ Standard HTTP status codes:
 - `POST /api/auth/verify-invite`
 - `POST /api/auth/register/player`
 
-### Coach Endpoints (8)
+### Coach Endpoints (11)
 - `GET /api/coach/dashboard`
 - `GET /api/coach/matches`
 - `GET /api/coach/matches/{match_id}`
 - `GET /api/coach/players`
 - `GET /api/coach/players/{player_id}`
+- `GET /api/coach/players/{player_id}/matches/{match_id}`
+- `GET /api/coach/profile`
+- `POST /api/coach/training-plans/generate-ai`
 - `POST /api/coach/training-plans`
+- `GET /api/coach/training-plans/{plan_id}`
 - `PUT /api/coach/training-plans/{plan_id}`
 - `DELETE /api/coach/training-plans/{plan_id}`
 
 ### Admin Endpoints (1)
+(Coaches serve as admins for their own clubs)
 - `POST /api/coach/matches` - Upload match data with StatsBomb events
 
-### Player Endpoints (8)
+### Player Endpoints (7)
 - `GET /api/player/dashboard`
 - `GET /api/player/matches`
 - `GET /api/player/matches/{match_id}`
@@ -425,13 +440,20 @@ Standard HTTP status codes:
 - `GET /api/player/training/{plan_id}`
 - `PUT /api/player/training/exercises/{exercise_id}/toggle`
 - `GET /api/player/profile`
-- `PUT /api/player/profile`
 
-**Total: 21 endpoints**
+**Total: 23 endpoints**
 
 ## Changelog
 
-### Version 1.1 (Current)
+### Version 1.2 (Current)
+- Added coach profile endpoint (GET /api/coach/profile)
+- Added training plan AI generation endpoint (POST /api/coach/training-plans/generate-ai)
+- Added training plan detail endpoint (GET /api/coach/training-plans/{plan_id})
+- Added player match detail endpoint (GET /api/coach/players/{player_id}/matches/{match_id})
+- Authentication responses updated for welcome screens (registration returns full data, login returns minimal data)
+- Documented client-side logout approach for stateless JWT architecture
+
+### Version 1.1
 - Added admin panel match upload endpoint
 - Added `opponent_players` table for lineup display
 - Added `statsbomb_team_id` to clubs and opponent_clubs
