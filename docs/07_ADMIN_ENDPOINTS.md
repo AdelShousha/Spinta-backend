@@ -292,25 +292,69 @@ if not club_id:
 # Extract team information from Starting XI events
 starting_xi_events = filter_events_by_type(statsbomb_events, "Starting XI")
 
-# Typically 2 Starting XI events (one per team)
+# Validation: Must have exactly 2 Starting XI events
+if len(starting_xi_events) != 2:
+    return 400 Bad Request - f"Expected 2 Starting XI events, found {len(starting_xi_events)}"
+
+# Validation: Each Starting XI must have 11 players
+for xi_event in starting_xi_events:
+    lineup_count = len(xi_event['tactics']['lineup'])
+    if lineup_count != 11:
+        return 400 Bad Request - f"Starting XI for {xi_event['team']['name']} has {lineup_count} players (expected 11)"
+
+# Extract team information
 team_1 = starting_xi_events[0]['team']  # {"id": 746, "name": "Thunder United FC"}
 team_2 = starting_xi_events[1]['team']  # {"id": 912, "name": "City Strikers"}
 
 # Determine which team is the coach's club
 our_club = get_club(club_id)
 
-if our_club.club_name == team_1['name']:
+# Helper function for fuzzy team name matching
+def match_team_name(club_name, team1_name, team2_name):
+    import difflib
+
+    club_lower = club_name.lower()
+    team1_lower = team1_name.lower()
+    team2_lower = team2_name.lower()
+
+    # Try exact match first
+    if club_lower == team1_lower:
+        return 1  # team_1
+    if club_lower == team2_lower:
+        return 2  # team_2
+
+    # Try substring match (handles "Thunder United" vs "Thunder United FC")
+    if club_lower in team1_lower or team1_lower in club_lower:
+        return 1
+    if club_lower in team2_lower or team2_lower in club_lower:
+        return 2
+
+    # Try fuzzy match with 80% similarity threshold
+    sim1 = difflib.SequenceMatcher(None, club_lower, team1_lower).ratio()
+    sim2 = difflib.SequenceMatcher(None, club_lower, team2_lower).ratio()
+
+    if sim1 > 0.8 and sim1 > sim2:
+        return 1
+    if sim2 > 0.8:
+        return 2
+
+    return None  # No match
+
+# Match club to team
+matched_team = match_team_name(our_club.club_name, team_1['name'], team_2['name'])
+
+if matched_team == 1:
     our_team_id = team_1['id']
     our_team_name = team_1['name']
     opponent_team_id = team_2['id']
     opponent_team_name = team_2['name']
-elif our_club.club_name == team_2['name']:
+elif matched_team == 2:
     our_team_id = team_2['id']
     our_team_name = team_2['name']
     opponent_team_id = team_1['id']
     opponent_team_name = team_1['name']
 else:
-    return 400 Bad Request - "Cannot match your club name to teams in event data"
+    return 400 Bad Request - f"Cannot match your club name '{our_club.club_name}' to teams in event data: '{team_1['name']}', '{team_2['name']}'"
 
 # Set statsbomb_team_id if not already set
 if our_club.statsbomb_team_id is NULL:
@@ -425,14 +469,18 @@ goal_events = [e for e in statsbomb_events
                if e['type']['name'] == 'Shot'
                and e.get('shot', {}).get('outcome', {}).get('name') == 'Goal']
 
-# Find assist for each goal (Pass event immediately before with goal_assist=true)
+# Find assist for each goal using key_pass_id reference
 for goal_event in goal_events:
-    # Find the Pass event just before this Shot
-    assist_event = find_pass_before_shot(statsbomb_events, goal_event)
+    # Check if the goal has an associated assist pass
+    key_pass_id = goal_event.get('shot', {}).get('key_pass_id')
 
     assist_name = None
-    if assist_event and assist_event.get('pass', {}).get('goal_assist'):
-        assist_name = assist_event['player']['name']
+    if key_pass_id:
+        # Find the Pass event with this specific ID
+        assist_event = next((e for e in statsbomb_events if e['id'] == key_pass_id), None)
+
+        if assist_event and assist_event.get('pass', {}).get('goal_assist'):
+            assist_name = assist_event['player']['name']
 
     INSERT INTO goals (
       goal_id,
@@ -720,22 +768,22 @@ INSERT INTO match_statistics (
 
 | Statistic | Calculation Method | Event Fields Used |
 |-----------|-------------------|-------------------|
-| **Possession %** | Time in possession / Total time | `possession_team`, `duration` |
+| **Possession %** | Sum of event durations where team has possession / Total match duration | `possession_team`, `duration` (Note: Events with duration=0 don't contribute) |
 | **Expected Goals (xG)** | Sum of shot xG values | `shot.statsbomb_xg` from Shot events |
 | **Total Shots** | Count Shot events | `type.name == "Shot"` |
-| **Shots on Target** | Count shots with outcome "Saved" or "Goal" | `shot.outcome.name IN ["Saved", "Goal"]` |
-| **Shots off Target** | Count shots with outcome "Off T", "Wayward" | `shot.outcome.name IN ["Off T", "Wayward"]` |
-| **Goalkeeper Saves** | Count opponent shots with outcome "Saved" | Opponent's Shot events with `outcome == "Saved"` |
+| **Shots on Target** | Count shots with outcome "Saved", "Goal", "Saved to Post", or "Post" | `shot.outcome.name IN ["Saved", "Goal", "Saved to Post", "Post"]` |
+| **Shots off Target** | Count shots with outcome "Off T", "Wayward", or "Blocked" | `shot.outcome.name IN ["Off T", "Wayward", "Blocked"]` |
+| **Goalkeeper Saves** | Count OPPONENT'S shots that were saved by YOUR team's GK | Shot events where `team == opponent_team_name` AND `shot.outcome.name == "Saved"` |
 | **Total Passes** | Count Pass events | `type.name == "Pass"` |
-| **Passes Completed** | Count successful passes | `pass.outcome` is NULL or "Complete" |
+| **Passes Completed** | Count passes WITHOUT 'outcome' field (successful passes have no outcome) | `pass.outcome` field is absent OR `pass.outcome` is None |
 | **Pass Completion Rate** | (Completed / Total) * 100 | Calculated from above |
-| **Passes in Final Third** | Count passes with location x > 80 | `location[0] > 80` for Pass events |
-| **Long Passes** | Count passes with length > 30 | `pass.length > 30` |
-| **Crosses** | Count passes with type "Cross" | `pass.type.name == "Cross"` |
+| **Passes in Final Third** | Count passes with location x > 80 (assumes attacking left-to-right) | `location[0] > 80` for Pass events (WARNING: May need adjustment if team attacks right-to-left) |
+| **Long Passes** | Count passes with length > 30 (Note: Short < 15, Medium 15-30, Long > 30) | `pass.length > 30` |
+| **Crosses** | Count passes with type containing "Cross" (includes High Cross, Low Cross, etc.) | `"Cross" in pass.type.name` |
 | **Total Dribbles** | Count Dribble events | `type.name == "Dribble"` |
 | **Successful Dribbles** | Count dribbles with outcome "Complete" | `dribble.outcome.name == "Complete"` |
-| **Total Tackles** | Count Duel events with type "Tackle" | `duel.type.name == "Tackle"` |
-| **Tackle Success %** | (Won tackles / Total tackles) * 100 | `duel.outcome.name == "Success"` |
+| **Total Tackles** | Count Duel events where sub-type is "Tackle" | `type.name == "Duel"` AND `duel.type.name == "Tackle"` |
+| **Tackle Success %** | (Won tackles / Total tackles) * 100 | `duel.outcome.name IN ["Won", "Success"]` |
 | **Interceptions** | Count Interception events | `type.name == "Interception"` |
 | **Ball Recoveries** | Count Ball Recovery events | `type.name == "Ball Recovery"` |
 

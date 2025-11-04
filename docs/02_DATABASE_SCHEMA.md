@@ -323,6 +323,41 @@ Stores raw StatsBomb event data.
 - Used to calculate player and match statistics
 - Links to players via `statsbomb_player_id`
 
+**JSONB Query Examples (Efficient Use of GIN Index):**
+
+```sql
+-- ✓ GOOD: Uses GIN index efficiently (containment operator @>)
+SELECT * FROM events
+WHERE event_data @> '{"type": {"name": "Shot"}}'::jsonb;
+
+SELECT * FROM events
+WHERE event_data @> '{"shot": {"outcome": {"name": "Goal"}}}'::jsonb;
+
+-- ✓ GOOD: Uses existence operator (?)
+SELECT * FROM events
+WHERE event_data->'pass' ? 'goal_assist';
+
+-- ✓ GOOD: Combined containment checks
+SELECT * FROM events
+WHERE event_data @> '{"type": {"name": "Pass"}}'::jsonb
+  AND event_data->'pass' ? 'goal_assist';
+
+-- ✗ BAD: Full table scan (doesn't use GIN index properly)
+SELECT * FROM events
+WHERE event_data->>'type' = 'Shot';
+
+SELECT * FROM events
+WHERE event_data->'shot'->'outcome'->>'name' = 'Goal';
+
+-- Extract nested values efficiently (use after filtering with @>)
+SELECT
+  event_data->>'player_name' as player,
+  (event_data->'shot'->>'statsbomb_xg')::numeric as xg
+FROM events
+WHERE event_data @> '{"type": {"name": "Shot"}}'::jsonb
+  AND event_data @> '{"shot": {"outcome": {"name": "Goal"}}}'::jsonb;
+```
+
 ---
 
 ### 10. match_statistics
@@ -335,7 +370,7 @@ Stores aggregated statistics per match (for both teams).
 | match_id | UUID | FOREIGN KEY → matches(match_id), NOT NULL | Match reference |
 | team_type | VARCHAR(20) | NOT NULL | 'our_team' or 'opponent_team' |
 | possession_percentage | DECIMAL(5,2) | NULL | Ball possession % |
-| expected_goals | DECIMAL(5,3) | NULL | xG |
+| expected_goals | DECIMAL(8,6) | NULL | xG (StatsBomb uses up to 8 decimal places) |
 | total_shots | INTEGER | NULL | Total shots |
 | shots_on_target | INTEGER | NULL | Shots on target |
 | shots_off_target | INTEGER | NULL | Shots off target |
@@ -380,7 +415,7 @@ Stores individual player statistics per match.
 | match_id | UUID | FOREIGN KEY → matches(match_id), NOT NULL | Match reference |
 | goals | INTEGER | DEFAULT 0 | Goals scored |
 | assists | INTEGER | DEFAULT 0 | Assists |
-| expected_goals | DECIMAL(5,3) | NULL | Player xG |
+| expected_goals | DECIMAL(8,6) | NULL | Player xG (StatsBomb uses up to 8 decimal places) |
 | shots | INTEGER | NULL | Total shots |
 | shots_on_target | INTEGER | NULL | Shots on target |
 | total_dribbles | INTEGER | NULL | Dribbles attempted |
@@ -475,7 +510,7 @@ Aggregated season statistics for players.
 | matches_played | INTEGER | DEFAULT 0 | Matches played |
 | goals | INTEGER | DEFAULT 0 | Total goals |
 | assists | INTEGER | DEFAULT 0 | Total assists |
-| expected_goals | DECIMAL(5,3) | NULL | Total xG |
+| expected_goals | DECIMAL(8,6) | NULL | Total xG (StatsBomb uses up to 8 decimal places) |
 | shots_per_game | DECIMAL(5,2) | NULL | Avg shots per game |
 | shots_on_target_per_game | DECIMAL(5,2) | NULL | Avg shots on target |
 | total_passes | INTEGER | NULL | Total passes |

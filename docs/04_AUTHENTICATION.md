@@ -241,7 +241,12 @@ VALUES (gen_random_uuid(), club_id, NOW());
 
 COMMIT;
 
--- 6. Generate JWT token
+-- 6. Fetch complete club data for response
+SELECT club_id, club_name, age_group, stadium, logo_url
+FROM clubs
+WHERE club_id = :club_id;
+
+-- 7. Generate JWT token
 token = generate_jwt({
   user_id: user_id,
   email: email,
@@ -250,6 +255,9 @@ token = generate_jwt({
 ```
 
 **Success Response (201 Created):**
+
+Contains data needed for Coach Welcome Screen (UI Page 5):
+
 ```json
 {
   "user": {
@@ -257,8 +265,13 @@ token = generate_jwt({
     "email": "john@email.com",
     "user_type": "coach",
     "full_name": "John Smith",
-    "coach_id": "550e8400-e29b-41d4-a716-446655440000",
-    "club_id": "club-uuid-here"
+    "club": {
+      "club_id": "club-uuid-here",
+      "club_name": "Thunder United FC",
+      "age_group": "U16",
+      "stadium": "City Stadium",
+      "logo_url": "https://storage.example.com/clubs/thunder-logo.png"
+    }
   },
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
@@ -428,7 +441,22 @@ WHERE player_id = ?;
 
 COMMIT;
 
--- 6. Generate JWT token
+-- 6. Fetch complete player and club data for response
+SELECT
+  p.player_id,
+  p.player_name,
+  p.jersey_number,
+  p.position,
+  p.birth_date,
+  p.profile_image_url,
+  c.club_id,
+  c.club_name,
+  c.logo_url
+FROM players p
+JOIN clubs c ON p.club_id = c.club_id
+WHERE p.player_id = :player_id;
+
+-- 7. Generate JWT token
 token = generate_jwt({
   user_id: player_id,
   email: email,
@@ -437,6 +465,9 @@ token = generate_jwt({
 ```
 
 **Success Response (201 Created):**
+
+Contains data needed for Player Welcome Screen (UI Page 24):
+
 ```json
 {
   "user": {
@@ -444,10 +475,15 @@ token = generate_jwt({
     "email": "marcus@email.com",
     "user_type": "player",
     "full_name": "Marcus Silva",
-    "player_id": "660e8400-e29b-41d4-a716-446655440001",
-    "club_id": "club-uuid-here",
     "jersey_number": 10,
-    "position": "Forward"
+    "position": "Forward",
+    "birth_date": "2008-03-20",
+    "profile_image_url": "https://storage.example.com/players/marcus.jpg",
+    "club": {
+      "club_id": "club-uuid-here",
+      "club_name": "Thunder United FC",
+      "logo_url": "https://storage.example.com/clubs/thunder-logo.png"
+    }
   },
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
@@ -498,20 +534,7 @@ is_valid = bcrypt.verify(password, password_hash)
 if not is_valid:
     return 401 Invalid credentials
 
--- 3. Get additional user data based on type
-
--- If coach:
-SELECT c.coach_id, cl.club_id
-FROM coaches c
-JOIN clubs cl ON c.coach_id = cl.coach_id
-WHERE c.coach_id = user_id;
-
--- If player:
-SELECT p.player_id, p.club_id, p.jersey_number, p.position
-FROM players p
-WHERE p.player_id = user_id;
-
--- 4. Generate JWT token
+-- 3. Generate JWT token (no additional queries needed for login)
 token = generate_jwt({
   user_id: user_id,
   email: email,
@@ -521,6 +544,8 @@ token = generate_jwt({
 
 **Success Response (200 OK):**
 
+Returns minimal essential data only (no welcome page for login):
+
 **For Coach:**
 ```json
 {
@@ -528,9 +553,7 @@ token = generate_jwt({
     "user_id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "john@email.com",
     "user_type": "coach",
-    "full_name": "John Smith",
-    "coach_id": "550e8400-e29b-41d4-a716-446655440000",
-    "club_id": "club-uuid-here"
+    "full_name": "John Smith"
   },
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
@@ -543,11 +566,7 @@ token = generate_jwt({
     "user_id": "660e8400-e29b-41d4-a716-446655440001",
     "email": "marcus@email.com",
     "user_type": "player",
-    "full_name": "Marcus Silva",
-    "player_id": "660e8400-e29b-41d4-a716-446655440001",
-    "club_id": "club-uuid-here",
-    "jersey_number": 10,
-    "position": "Forward"
+    "full_name": "Marcus Silva"
   },
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
@@ -566,6 +585,75 @@ Invalid Credentials (401 Unauthorized):
 - Use same error message for "user not found" and "wrong password" (prevent email enumeration)
 - Rate limit: 5 failed attempts per IP per 15 minutes
 - Consider: Account lockout after 10 failed attempts
+
+---
+
+## Logout
+
+### Client-Side Logout (Recommended)
+
+Since JWT tokens are **stateless**, logout is handled entirely on the client side.
+
+**Frontend Process:**
+1. Delete token from storage (localStorage, sessionStorage, or cookies)
+2. Clear any cached user data from application state
+3. Redirect to login page
+
+**No API endpoint needed** - tokens remain valid until expiration.
+
+**Security Notes:**
+- Use short token expiration times (24 hours or less recommended)
+- Store tokens securely:
+  - **Web:** httpOnly cookies (preferred) or localStorage
+  - **Mobile:** Secure storage (Keychain on iOS, Keystore on Android)
+- Always use HTTPS in production
+- Backend validates token expiration on every request
+- Frontend should handle 401 Unauthorized by redirecting to login
+
+**Example Implementation (Web - localStorage):**
+```javascript
+// Logout function
+function logout() {
+  // Remove auth data
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('user_data');
+
+  // Redirect to login
+  window.location.href = '/login';
+}
+```
+
+**Example Implementation (Mobile - React Native with AsyncStorage):**
+```javascript
+// Logout function
+async function logout() {
+  try {
+    // Remove auth data
+    await AsyncStorage.removeItem('auth_token');
+    await AsyncStorage.removeItem('user_data');
+
+    // Navigate to login screen
+    navigation.navigate('Login');
+  } catch (error) {
+    console.error('Logout error:', error);
+  }
+}
+```
+
+**Token Expiration Handling:**
+```javascript
+// Axios interceptor example for handling token expiration
+axios.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid - logout user
+      logout();
+    }
+    return Promise.reject(error);
+  }
+);
+```
 
 ---
 
