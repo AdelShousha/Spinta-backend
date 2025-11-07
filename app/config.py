@@ -11,6 +11,7 @@ Key Concepts:
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 from typing import List
 
 
@@ -41,8 +42,13 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"  # JWT algorithm (HS256 is standard)
 
     # CORS (Cross-Origin Resource Sharing)
-    # Allows frontend apps from these origins to access the API
-    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    # Stored as comma-separated string in .env file
+    # Example: CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+    # The validation_alias tells Pydantic to look for "CORS_ORIGINS" in .env
+    cors_origins_str: str = Field(
+        default="http://localhost:3000,http://localhost:8080",
+        validation_alias="CORS_ORIGINS"
+    )
 
     # Pydantic configuration
     model_config = SettingsConfigDict(
@@ -50,6 +56,21 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8", # UTF-8 encoding
         case_sensitive=False       # DATABASE_URL and database_url both work
     )
+
+    @property
+    def cors_origins(self) -> List[str]:
+        """
+        Parse CORS origins from comma-separated string to list.
+
+        This property converts the cors_origins_str (comma-separated string)
+        into a list of origins that FastAPI's CORS middleware expects.
+
+        Why use a property?
+        - Pydantic Settings tries to parse List[str] fields as JSON from env vars
+        - By using a string field + property, we avoid the JSON parsing issue
+        - The property provides easy access as a list when needed
+        """
+        return [origin.strip() for origin in self.cors_origins_str.split(',')]
 
 
 # Create a global settings instance

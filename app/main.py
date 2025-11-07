@@ -13,26 +13,10 @@ Key Concepts:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 
-from app.config import settings, get_database_url
-
-
-# Database Engine Setup
-# The engine manages connections to the database
-# echo=True prints all SQL queries (useful for learning/debugging)
-engine = create_engine(
-    get_database_url(),
-    echo=settings.debug,  # Print SQL queries when DEBUG=True
-    pool_pre_ping=True,   # Test connections before using them
-    pool_size=5,          # Keep 5 connections ready
-    max_overflow=10       # Allow up to 10 additional connections when busy
-)
-
-# Session Factory
-# Creates database sessions for running queries
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+from app.config import settings
+from app.database import engine  # Import engine from database module
 
 
 @asynccontextmanager
@@ -110,30 +94,6 @@ async def root():
 
 
 # Import and include health check routes
-# We'll create this file next
+# Health routes are registered after app is created to avoid circular imports
 from app.api.routes import health
 app.include_router(health.router, prefix="/api", tags=["Health"])
-
-
-# Dependency: Get Database Session
-def get_db():
-    """
-    Database Session Dependency
-
-    This is a dependency that provides a database session to endpoints.
-    FastAPI will automatically:
-    1. Create a session before the request
-    2. Pass it to the endpoint function
-    3. Close it after the request (even if there's an error)
-
-    Usage in endpoints:
-    @app.get("/some-endpoint")
-    def my_endpoint(db: Session = Depends(get_db)):
-        # Use db here to query the database
-        pass
-    """
-    db = SessionLocal()
-    try:
-        yield db  # Provide the session to the endpoint
-    finally:
-        db.close()  # Always close the session
