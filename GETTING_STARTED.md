@@ -8,6 +8,7 @@ Spinta_Backend/
 │   ├── __init__.py
 │   ├── main.py              ✅ FastAPI application entry point
 │   ├── config.py            ✅ Configuration management
+│   ├── database.py          ✅ Database connection and dependencies
 │   └── api/
 │       ├── __init__.py
 │       └── routes/
@@ -18,9 +19,69 @@ Spinta_Backend/
 │   └── test_health.py       ✅ Health endpoint tests (TDD)
 ├── docs/                     (Your existing documentation)
 ├── .env.example             ✅ Configuration template
+├── .env                     ✅ Your local configuration (not in git)
+├── .gitignore               ✅ Git ignore file
 ├── requirements.txt         ✅ Python dependencies
-└── pytest.ini               ✅ Test configuration
+├── pytest.ini               ✅ Test configuration
+└── GETTING_STARTED.md       ✅ This file!
 ```
+
+## 🔧 Important Changes & Fixes
+
+During the initial setup, we encountered and resolved several issues. Here's what was fixed:
+
+### 1. **pytest.ini Configuration Issue**
+**Problem:** Inline comments in the `addopts` section caused pytest to fail with "ERROR: file or directory not found: #"
+
+**Solution:** Moved all comments to separate lines above the options. Pytest configuration files don't support inline comments in multi-line option values.
+
+```ini
+# Before (broken):
+addopts =
+    -v  # Verbose output
+
+# After (fixed):
+# -v: Verbose output
+addopts =
+    -v
+```
+
+### 2. **CORS Origins Parsing Error**
+**Problem:** Pydantic Settings tried to parse `cors_origins: List[str]` as JSON from the `.env` file, causing a JSON parsing error.
+
+**Solution:** Changed the approach:
+- Store as a string field: `cors_origins_str: str`
+- Use `Field(validation_alias="CORS_ORIGINS")` to map the env var name
+- Created a `@property` method that converts the comma-separated string to a list on-the-fly
+
+**Why this works:**
+- Pydantic doesn't try to parse strings as JSON
+- The `.env` file can use simple comma-separated format: `CORS_ORIGINS=http://localhost:3000,http://localhost:8080`
+- FastAPI gets a list when accessing `settings.cors_origins`
+
+### 3. **Circular Import Issue**
+**Problem:** `main.py` imported `health.py`, but `health.py` tried to import `get_db` from `main.py`, creating a circular dependency.
+
+**Solution:** Created a new `database.py` module to centralize database-related code:
+- Moved database engine setup to `database.py`
+- Moved session factory to `database.py`
+- Moved `get_db` dependency to `database.py`
+
+**Import flow (now working):**
+```
+config.py → database.py → main.py → health.py
+                ↑                      ↓
+                └──────────────────────┘
+```
+
+**Key Learning:**
+- Circular imports are a common issue in Python applications
+- Solution: Extract shared code into a separate module
+- This pattern (separate `database.py`) is standard in FastAPI projects
+
+### 4. **New Files Created**
+- **`database.py`**: Centralizes all database configuration, connection pooling, and the `get_db` dependency
+- **`.gitignore`**: Prevents sensitive files (`.env`, `__pycache__`, etc.) from being committed to git
 
 ## 🚀 Step-by-Step Setup
 
@@ -131,27 +192,37 @@ print(response.json())
 
 ### 1. **Project Structure**
 - Organized code into packages (`app/`, `tests/`)
-- Separation of concerns (config, routes, tests separate)
+- Separation of concerns (config, database, routes, tests separate)
+- Proper module organization to avoid circular imports
 
 ### 2. **Configuration Management** (`config.py`)
 - Environment variables for secrets
 - Type-safe configuration with Pydantic
 - Database connection string handling
+- Custom CORS origins parsing with `@property`
+- Field aliases for flexible env var naming
 
-### 3. **FastAPI Application** (`main.py`)
+### 3. **Database Layer** (`database.py`)
+- SQLAlchemy engine with connection pooling
+- Session factory for database operations
+- `get_db` dependency for FastAPI endpoints
+- Configured for Neon serverless PostgreSQL
+
+### 4. **FastAPI Application** (`main.py`)
 - App initialization with metadata
-- Database connection pooling
 - Lifespan events (startup/shutdown)
-- CORS middleware
-- Dependency injection (`get_db`)
+- CORS middleware configuration
+- Route registration
+- Database connection testing on startup
 
-### 4. **Health Check Endpoint** (`health.py`)
+### 5. **Health Check Endpoint** (`health.py`)
 - API Router for organizing routes
 - Database dependency injection
 - Error handling with try/except
 - Simple SQL query to test connection
+- Detailed health check endpoint (bonus)
 
-### 5. **Test-Driven Development** (`test_health.py`)
+### 6. **Test-Driven Development** (`test_health.py`)
 - Write tests FIRST
 - Test client for FastAPI
 - Multiple test cases for one endpoint
@@ -164,12 +235,25 @@ print(response.json())
 - **Depends()**: Dependency injection system
 - **Lifespan**: Startup/shutdown events
 - **TestClient**: Test endpoints without running server
+- **CORS Middleware**: Allow cross-origin requests from frontends
 
 ### Database Concepts:
 - **Connection String**: URL to connect to database
-- **Connection Pooling**: Reuse database connections
+- **Connection Pooling**: Reuse database connections efficiently
 - **Session**: A conversation with the database
 - **SQL Query**: `SELECT 1` tests if database is alive
+- **pool_pre_ping**: Essential for serverless databases like Neon
+
+### Pydantic Concepts:
+- **Settings Management**: Type-safe configuration from env vars
+- **Field Aliases**: Map different names between code and env vars
+- **@property**: Computed values that look like regular attributes
+- **Custom Validators**: Transform data before validation
+
+### Python/Architecture Concepts:
+- **Circular Imports**: When Module A imports B and B imports A
+- **Module Separation**: Breaking code into focused modules
+- **Dependency Management**: `requirements.txt` for reproducibility
 
 ### Testing Concepts:
 - **TDD**: Write tests before code
@@ -179,11 +263,26 @@ print(response.json())
 
 ## 🔍 Common Issues & Solutions
 
-### Issue 1: ModuleNotFoundError
+### Issue 1: pytest ERROR: file or directory not found: #
+**Problem:** pytest fails to collect tests with "ERROR: file or directory not found: #"
+**Cause:** Inline comments in `pytest.ini` `addopts` section
+**Solution:** Already fixed! We moved comments to separate lines above the options.
+
+### Issue 2: CORS Origins JSON Parsing Error
+**Problem:** `pydantic_settings.sources.SettingsError: error parsing value for field "cors_origins"`
+**Cause:** Pydantic tries to parse `List[str]` as JSON from `.env` file
+**Solution:** Already fixed! We use a string field with `@property` to convert comma-separated values.
+
+### Issue 3: Circular Import Error
+**Problem:** `ImportError: cannot import name 'get_db' from partially initialized module 'app.main'`
+**Cause:** `main.py` imports `health.py`, but `health.py` imports from `main.py`
+**Solution:** Already fixed! We created `database.py` to centralize database code.
+
+### Issue 4: ModuleNotFoundError
 **Problem:** Python can't find `app` module
 **Solution:** Make sure you're in `Spinta_Backend` directory when running commands
 
-### Issue 2: Database Connection Failed
+### Issue 5: Database Connection Failed
 **Problem:** Can't connect to Neon
 **Solutions:**
 - Check DATABASE_URL in `.env` is correct
@@ -191,7 +290,7 @@ print(response.json())
 - Check your internet connection
 - Ensure `?sslmode=require` is at the end of URL
 
-### Issue 3: Tests Failing
+### Issue 6: Tests Failing
 **Problem:** pytest shows errors
 **Solutions:**
 - Read the error message carefully
@@ -199,7 +298,7 @@ print(response.json())
 - Verify DATABASE_URL is set
 - Try running one test at a time: `pytest tests/test_health.py::TestHealthEndpoint::test_health_endpoint_exists -v`
 
-### Issue 4: Port Already in Use
+### Issue 7: Port Already in Use
 **Problem:** `uvicorn` says port 8000 is busy
 **Solution:** Use a different port:
 ```bash
@@ -260,31 +359,51 @@ flake8 app/ tests/
    - Notice how the endpoint handles errors gracefully
 
 2. **How does Depends() work?**
-   - Read the `get_db()` function in `main.py`
-   - Notice how FastAPI automatically calls it
+   - Read the `get_db()` function in `database.py`
+   - Notice how FastAPI automatically calls it and provides a session
 
-3. **Why separate routes into files?**
+3. **Why separate database code into database.py?**
+   - Prevents circular imports
+   - Makes testing easier (can mock database separately)
+   - Standard pattern in FastAPI projects
+
+4. **Why separate routes into files?**
    - Imagine 50 endpoints in one file vs organized folders
    - Better organization = easier maintenance
 
-4. **Why write tests before code?**
+5. **Why write tests before code?**
    - Tests define expected behavior
    - Code implements to meet those expectations
    - Confidence that code works as intended
 
+6. **How does the @property decorator work?**
+   - Look at `cors_origins` in `config.py`
+   - It converts a string to a list automatically when accessed
+   - No duplicate data stored!
+
 ## 🎉 Congratulations!
 
 You've built:
-✅ A structured FastAPI project
-✅ Database connection with connection pooling
-✅ A tested health check endpoint
-✅ Test-driven development workflow
+✅ A structured FastAPI project with proper module separation
+✅ Database connection with connection pooling (Neon-ready!)
+✅ A tested health check endpoint (TDD approach)
+✅ Configuration management with Pydantic
+✅ Resolved real-world issues (circular imports, CORS parsing)
 
 **You now understand:**
-- FastAPI basics
-- Database connections
-- Dependency injection
-- Testing with pytest
-- Project organization
+- FastAPI basics (routing, middleware, dependencies)
+- Database connections and SQLAlchemy
+- Dependency injection with `Depends()`
+- Testing with pytest (TDD workflow)
+- Project organization and avoiding circular imports
+- Pydantic Settings with custom validators
+- Environment variable management
 
-Ready for Phase 2 (Database Models)? Let me know!
+**Real-World Skills Gained:**
+- Debugging configuration issues
+- Understanding and fixing circular imports
+- Working with serverless databases (Neon)
+- Test-driven development approach
+- Reading and understanding error messages
+
+Ready for Phase 2 (Database Models & Migrations)? Let me know!
