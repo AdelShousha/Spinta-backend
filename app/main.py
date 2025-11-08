@@ -10,6 +10,8 @@ Key Concepts:
 - Database connection is initialized on startup
 """
 
+from app.api.routes import health
+from app import __version__
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -17,6 +19,8 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine  # Import engine from database module
+
+# has the code to run when the app starts up and shuts down
 
 
 @asynccontextmanager
@@ -54,8 +58,8 @@ async def lifespan(app: FastAPI):
 # Create FastAPI Application
 app = FastAPI(
     title=settings.app_name,
-    description="Youth soccer analytics platform API",
-    version="0.1.0",
+    description="Youth soccer analytics platform API",  # shown in Swagger UI
+    version=__version__,
     lifespan=lifespan,  # Register lifespan handler
     docs_url="/docs",    # Swagger UI at http://localhost:8000/docs
     redoc_url="/redoc"   # ReDoc at http://localhost:8000/redoc
@@ -68,17 +72,16 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,  # Which origins can access the API
     allow_credentials=True,                # Allow cookies
-    allow_methods=["*"],                   # Allow all HTTP methods (GET, POST, etc.)
+    # Allow all HTTP methods (GET, POST, etc.)
+    allow_methods=["*"],
     allow_headers=["*"],                   # Allow all headers
 )
 
 
 # Register Routes
 # We'll import and include route modules here
-# For now, we'll add the health check route
 
-
-@app.get("/", tags=["Root"])
+@app.get("/", tags=["Root"])  # tags is used in API docs to group endpoints
 async def root():
     """
     Root endpoint - Simple welcome message
@@ -89,11 +92,9 @@ async def root():
     return {
         "message": "Welcome to Spinta Backend API",
         "docs": "/docs",
-        "health": "/health"
+        "redoc": "/redoc"
     }
 
 
-# Import and include health check routes
-# Health routes are registered after app is created to avoid circular imports
-from app.api.routes import health
+# Include routes from other modules
 app.include_router(health.router, prefix="/api", tags=["Health"])

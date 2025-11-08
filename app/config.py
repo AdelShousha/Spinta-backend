@@ -24,37 +24,34 @@ class Settings(BaseSettings):
     1. Environment variables (highest priority)
     2. .env file (if it exists)
     3. Default values defined here (lowest priority)
+
+    In development, store sensitive info (DB URL, secret keys) in .env file.
+    In production (on server), never put a .env file; Instead set the same variable names directly in the server's settings panel
+    If non of them exist the app uses the default values defined below (if any).
+    If a required variable has no default and is not set in env or .env, Pydantic raises a validation error on startup.
     """
 
     # Application Metadata
     app_name: str = "Spinta Backend"
     debug: bool = True
 
+    # database_url, secret_key are required because they have no defaults (editor will warn about it)
+
     # Database Configuration
-    # This is your Neon database connection string
-    # Format: postgresql://user:password@host/database?sslmode=require
     database_url: str
 
     # JWT Authentication
-    # SECRET_KEY must be a strong random string in production
     # Generate with: openssl rand -hex 32
     secret_key: str
     algorithm: str = "HS256"  # JWT algorithm (HS256 is standard)
 
-    # CORS (Cross-Origin Resource Sharing)
+    # CORS Configuration
     # Stored as comma-separated string in .env file
     # Example: CORS_ORIGINS=http://localhost:3000,http://localhost:8080
     # The validation_alias tells Pydantic to look for "CORS_ORIGINS" in .env
     cors_origins_str: str = Field(
         default="http://localhost:3000,http://localhost:8080",
         validation_alias="CORS_ORIGINS"
-    )
-
-    # Pydantic configuration
-    model_config = SettingsConfigDict(
-        env_file=".env",           # Load from .env file
-        env_file_encoding="utf-8", # UTF-8 encoding
-        case_sensitive=False       # DATABASE_URL and database_url both work
     )
 
     @property
@@ -71,6 +68,13 @@ class Settings(BaseSettings):
         - The property provides easy access as a list when needed
         """
         return [origin.strip() for origin in self.cors_origins_str.split(',')]
+
+    # Pydantic configuration
+    model_config = SettingsConfigDict(
+        env_file=".env",           # Load from .env file
+        env_file_encoding="utf-8",  # UTF-8 encoding
+        case_sensitive=False       # DATABASE_URL and database_url both work
+    )
 
 
 # Create a global settings instance
@@ -94,6 +98,7 @@ def get_database_url() -> str:
 # Display loaded configuration (for debugging)
 if settings.debug:
     print(f"🚀 {settings.app_name} starting...")
-    print(f"📊 Database: {settings.database_url.split('@')[1] if '@' in settings.database_url else 'Not configured'}")
+    print(
+        f"📊 Database: {settings.database_url.split('@')[1] if '@' in settings.database_url else 'Not configured'}")
     print(f"🔒 JWT Algorithm: {settings.algorithm}")
     print(f"🌐 CORS Origins: {settings.cors_origins}")

@@ -81,38 +81,3 @@ async def health_check(db: Session = Depends(get_db)):
         "status": "healthy",      # API is running
         "database": database_status  # Database connection state
     }
-
-
-# Additional endpoint: Detailed health check (optional)
-@router.get("/health/detailed")
-async def detailed_health_check(db: Session = Depends(get_db)):
-    """
-    Detailed Health Check
-
-    Provides more detailed information about the system.
-    Useful for debugging and monitoring.
-
-    Returns:
-        dict: Detailed health information
-    """
-    database_status = "disconnected"
-    database_version = None
-
-    try:
-        # Get PostgreSQL version
-        result = db.execute(text("SELECT version()"))
-        version_info = result.scalar()
-        database_version = version_info.split(",")[0] if version_info else "Unknown"
-        database_status = "connected"
-
-    except Exception as e:
-        print(f"Detailed health check failed: {e}")
-
-    return {
-        "status": "healthy",
-        "database": {
-            "status": database_status,
-            "version": database_version
-        },
-        "api_version": "0.1.0"
-    }
