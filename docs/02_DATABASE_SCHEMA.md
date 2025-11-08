@@ -8,21 +8,31 @@ This document provides the complete database schema for the Spinta platform. All
 
 ```
 users
-  ↓ (1:1)
-coaches ──→ clubs
-           ↓ (1:N)
-         players ←──── training_plans ←──── training_exercises
-           ↓ (N:N via matches)
-         matches ←──── goals
-           ↓           ↓
-      match_statistics  events
-           ↓
-    opponent_clubs
+  ↓ (1:1 via user_id)
+  ├─→ coaches ──→ clubs
+  │                ↓ (1:N)
+  └─→ players ←────┘
+         ↓
+    training_plans ←──── training_exercises
+
+players ←──── matches ──→ opponent_clubs
+  ↓ (N:N via matches)     ↓
+  │                   opponent_players
+  ↓
+match_statistics
+  ↓           ↓
+  goals     events
 
 Statistics Tables (aggregated):
 - club_season_statistics (from match_statistics)
 - player_season_statistics (from player_match_statistics)
 - player_match_statistics (from events)
+
+Key relationships:
+- users.user_id → coaches.user_id (1:1, always linked)
+- users.user_id → players.user_id (1:1, NULL before signup, linked after)
+- coaches.coach_id → clubs.coach_id (1:1)
+- clubs.club_id → players.club_id (1:N)
 ```
 
 ## Tables
@@ -45,10 +55,16 @@ Stores all user accounts (both coaches and players).
 - `idx_users_email` on `email`
 - `idx_users_user_type` on `user_type`
 
+**Relationships:**
+- One-to-one with `coaches` table (via coaches.user_id)
+- One-to-one with `players` table (via players.user_id, when player signs up)
+
 **Notes:**
-- For players: `user_id` will be the same as the pre-existing `player_id`
+- `user_id` is referenced by both coaches and players tables via their user_id foreign keys
+- For coaches: Created during coach registration, coach record immediately linked via user_id
+- For players: Created during player signup, player.user_id is set to link to the user account
 - `password_hash` should use bcrypt or similar
-- `user_type` used for role-based access control
+- `user_type` used for role-based access control ('coach' or 'player')
 
 ---
 
@@ -58,18 +74,24 @@ Stores coach-specific information.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
-| coach_id | UUID | PRIMARY KEY, FOREIGN KEY → users(user_id) | Coach identifier (same as user_id) |
+| coach_id | UUID | PRIMARY KEY | Unique coach identifier |
+| user_id | UUID | FOREIGN KEY → users(user_id), UNIQUE, NOT NULL | Reference to user account |
 | birth_date | DATE | NULL | Coach's birth date |
 | gender | VARCHAR(20) | NULL | Coach's gender |
 | created_at | TIMESTAMP | NOT NULL | Record creation time |
 | updated_at | TIMESTAMP | NOT NULL | Last update time |
 
+**Indexes:**
+- `idx_coaches_user_id` on `user_id`
+
 **Relationships:**
-- One-to-one with `users` table
+- One-to-one with `users` table (via user_id)
 - One-to-one with `clubs` table (coach creates one club)
 
 **Notes:**
-- `coach_id` is both PK and FK to users table
+- `coach_id` is a separate primary key (auto-generated UUID)
+- `user_id` is a foreign key to users table with UNIQUE constraint (one coach per user)
+- When a user registers as a coach, a coach record is created with their user_id
 - Profile image removed (not needed per requirements)
 
 ---
@@ -113,7 +135,8 @@ Stores player profiles, including incomplete players (before signup).
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
-| player_id | UUID | PRIMARY KEY, FOREIGN KEY → users(user_id) | Player identifier |
+| player_id | UUID | PRIMARY KEY | Unique player identifier |
+| user_id | UUID | FOREIGN KEY → users(user_id), UNIQUE, NULL | Reference to user account (NULL before signup) |
 | club_id | UUID | FOREIGN KEY → clubs(club_id), NOT NULL | Player's club |
 | player_name | VARCHAR(255) | NOT NULL | Player name (before and after signup) |
 | statsbomb_player_id | INTEGER | NULL | StatsBomb player ID from data |
@@ -129,6 +152,7 @@ Stores player profiles, including incomplete players (before signup).
 | updated_at | TIMESTAMP | NOT NULL | Last update time |
 
 **Indexes:**
+- `idx_players_user_id` on `user_id`
 - `idx_players_club_id` on `club_id`
 - `idx_players_invite_code` on `invite_code`
 - `idx_players_is_linked` on `is_linked`
@@ -136,23 +160,31 @@ Stores player profiles, including incomplete players (before signup).
 
 **Unique Constraints:**
 - `invite_code` must be unique across all players
+- `user_id` must be unique when not NULL (one player per user account)
 
 **Relationships:**
 - Many-to-one with `clubs` table
-- One-to-one with `users` table (after signup)
+- One-to-one with `users` table (after signup, via user_id)
 - One-to-many with `training_plans` table
 
 **Notes:**
+- **player_id vs user_id**:
+  - `player_id` is a separate primary key (auto-generated UUID)
+  - `user_id` is NULL for incomplete players (before signup)
+  - `user_id` is set when player completes signup, linking to their user account
+  - UNIQUE constraint on user_id ensures one player per user account
+
 - **Incomplete players** (before signup):
   - Created by admin during match processing
   - Have `player_name`, `statsbomb_player_id`, `jersey_number`, `position`, `invite_code`
-  - `is_linked = FALSE`
+  - `is_linked = FALSE`, `user_id = NULL`
   - `birth_date`, `height`, `profile_image_url` are NULL
 
 - **Complete players** (after signup):
-  - User account created with `user_id = player_id`
+  - User account created and `user_id` field is set
   - `is_linked = TRUE`, `linked_at = NOW()`
-  - All fields filled
+  - `user_id` links to users table
+  - All profile fields filled
 
 - **Player name handling**:
   - Stored in both `players.player_name` and `users.full_name` after signup

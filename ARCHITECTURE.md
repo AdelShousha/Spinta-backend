@@ -848,6 +848,588 @@ class TestHealthEndpoint:
 
 ---
 
+### 15. `app/models/base.py` - Database Base & Utilities
+
+**Location:** `D:\Spinta_Backend\app\models\base.py`
+
+**Purpose:** Provide foundation for all SQLAlchemy models with shared utilities and base classes.
+
+**Key Components:**
+
+#### **Platform-Independent GUID Type:**
+```python
+class GUID(TypeDecorator):
+    """
+    Platform-independent GUID type.
+
+    Uses PostgreSQL's UUID type when available, otherwise uses
+    String(36) for SQLite and other databases.
+    """
+    impl = String
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(PG_UUID(as_uuid=False))
+        else:
+            return dialect.type_descriptor(String(36))
+```
+
+**Why GUID exists:**
+- **Production (PostgreSQL)**: Uses native UUID type (efficient, indexed)
+- **Testing (SQLite)**: Uses String(36) (compatible, no errors)
+- **Seamless**: Same code works with both databases
+- **No changes needed**: Models work in production and tests
+
+#### **Declarative Base:**
+```python
+Base = declarative_base()
+```
+
+**What this provides:**
+- All models inherit from `Base`
+- Tracks all model metadata
+- Used by Alembic for migrations
+
+#### **TimestampMixin:**
+```python
+class TimestampMixin:
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now()
+    )
+
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+```
+
+**What this provides:**
+- Automatic `created_at` timestamp on insert
+- Automatic `updated_at` timestamp on update
+- DRY: Define once, use in all models
+- Database-level defaults (server_default)
+
+#### **UUID Generator:**
+```python
+def generate_uuid():
+    return str(uuid.uuid4())
+```
+
+**What this does:**
+- Generates globally unique identifiers
+- Returns string (compatible with GUID type)
+- Used as default for all primary keys
+
+**Why This Exists:**
+- **Consistency**: All models use same base
+- **DRY**: Shared utilities avoid repetition
+- **Flexibility**: Works with PostgreSQL and SQLite
+- **Timestamps**: Automatic created_at/updated_at
+
+**Connection to Other Files:**
+- Imported by: All model files
+- Used by: `user.py`, `coach.py`, `club.py`, `player.py`
+- Provides: `Base`, `TimestampMixin`, `generate_uuid`, `GUID`
+
+---
+
+### 16. `app/models/user.py` - User Model
+
+**Location:** `D:\Spinta_Backend\app\models\user.py`
+
+**Purpose:** Store user accounts for both coaches and players.
+
+**Schema (7 fields):**
+```python
+class User(Base, TimestampMixin):
+    __tablename__ = "users"
+
+    user_id = Column(GUID, primary_key=True, default=generate_uuid)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    user_type = Column(String(20), nullable=False, index=True)  # 'coach' or 'player'
+    # created_at, updated_at from TimestampMixin
+```
+
+**Relationships:**
+- One-to-one with Coach (via `coaches.user_id`)
+- One-to-one with Player (via `players.user_id`, when linked)
+
+**Helper Methods:**
+```python
+def is_coach(self) -> bool:
+    return self.user_type == "coach"
+
+def is_player(self) -> bool:
+    return self.user_type == "player"
+```
+
+**Why This Exists:**
+- **Authentication**: Single table for all users
+- **Role-Based Access**: `user_type` determines permissions
+- **Simplicity**: Password hashing in one place
+- **Separation**: User account separate from role-specific data
+
+**Constraints:**
+- Email must be unique (UNIQUE index)
+- user_type indexed for filtering
+- Cascade delete to coach/player when user deleted
+
+**Connection to Other Files:**
+- Extended by: `coach.py` (one-to-one)
+- Extended by: `player.py` (one-to-one)
+- Tested in: `tests/test_models.py`
+
+---
+
+### 17. `app/models/coach.py` - Coach Model
+
+**Location:** `D:\Spinta_Backend\app\models\coach.py`
+
+**Purpose:** Store coach-specific information linked to user account.
+
+**Schema (6 fields):**
+```python
+class Coach(Base, TimestampMixin):
+    __tablename__ = "coaches"
+
+    coach_id = Column(GUID, primary_key=True, default=generate_uuid)
+    user_id = Column(GUID, ForeignKey('users.user_id', ondelete='CASCADE'),
+                     unique=True, nullable=False, index=True)
+    birth_date = Column(Date, nullable=True)
+    gender = Column(String(20), nullable=True)
+    # created_at, updated_at from TimestampMixin
+```
+
+**Relationships:**
+- One-to-one with User (via `user_id`)
+- One-to-one with Club (one coach owns one club)
+
+**Convenience Properties:**
+```python
+@property
+def email(self):
+    return self.user.email if self.user else None
+
+@property
+def full_name(self):
+    return self.user.full_name if self.user else None
+```
+
+**Why This Exists:**
+- **Separation**: Coach data separate from user account
+- **Flexibility**: Can add coach-specific fields without affecting users table
+- **Design Pattern**: Separate PK (coach_id) from FK (user_id)
+
+**Constraints:**
+- user_id is UNIQUE (one coach per user)
+- user_id is NOT NULL (coach must have user account)
+- CASCADE delete from users
+
+**Connection to Other Files:**
+- Linked to: `user.py` (one-to-one)
+- Extended by: `club.py` (one-to-one)
+- Tested in: `tests/test_models.py`
+
+---
+
+### 18. `app/models/club.py` - Club Model
+
+**Location:** `D:\Spinta_Backend\app\models\club.py`
+
+**Purpose:** Store club/team information owned by coaches.
+
+**Schema (10 fields):**
+```python
+class Club(Base, TimestampMixin):
+    __tablename__ = "clubs"
+
+    club_id = Column(GUID, primary_key=True, default=generate_uuid)
+    coach_id = Column(GUID, ForeignKey('coaches.coach_id', ondelete='CASCADE'),
+                      unique=True, nullable=False, index=True)
+    club_name = Column(String(255), nullable=False)
+    statsbomb_team_id = Column(Integer, unique=True, nullable=True)
+    country = Column(String(100), nullable=True)
+    age_group = Column(String(20), nullable=True)  # "U16", "U18", etc.
+    stadium = Column(String(255), nullable=True)
+    logo_url = Column(String, nullable=True)
+    # created_at, updated_at from TimestampMixin
+```
+
+**Relationships:**
+- One-to-one with Coach (via `coach_id`)
+- One-to-many with Players (club has multiple players)
+
+**Convenience Properties:**
+```python
+@property
+def coach_name(self):
+    return self.coach.full_name if self.coach else None
+
+@property
+def player_count(self):
+    return len(self.players) if hasattr(self, 'players') else 0
+```
+
+**Why This Exists:**
+- **Team Management**: Each coach manages one club
+- **StatsBomb Integration**: `statsbomb_team_id` links to event data
+- **Player Organization**: Groups players by club
+
+**Constraints:**
+- coach_id is UNIQUE (one club per coach)
+- statsbomb_team_id is UNIQUE (each StatsBomb team maps to one club)
+- CASCADE delete from coaches and to players
+
+**Connection to Other Files:**
+- Linked to: `coach.py` (one-to-one)
+- Parent of: `player.py` (one-to-many)
+- Tested in: `tests/test_models.py`
+
+---
+
+### 19. `app/models/player.py` - Player Model
+
+**Location:** `D:\Spinta_Backend\app\models\player.py`
+
+**Purpose:** Handle both incomplete players (before signup) and complete players (after signup).
+
+**Schema (15 fields):**
+```python
+class Player(Base, TimestampMixin):
+    __tablename__ = "players"
+
+    player_id = Column(GUID, primary_key=True, default=generate_uuid)
+    user_id = Column(GUID, ForeignKey('users.user_id', ondelete='CASCADE'),
+                     unique=True, nullable=True, index=True)  # NULL before signup
+    club_id = Column(GUID, ForeignKey('clubs.club_id', ondelete='CASCADE'),
+                     nullable=False, index=True)
+    player_name = Column(String(255), nullable=False)
+    statsbomb_player_id = Column(Integer, nullable=True, index=True)
+    jersey_number = Column(Integer, nullable=False)
+    position = Column(String(50), nullable=False)
+    invite_code = Column(String(10), unique=True, nullable=False, index=True)
+    is_linked = Column(Boolean, nullable=False, default=False, index=True)
+    linked_at = Column(DateTime(timezone=True), nullable=True)
+    birth_date = Column(Date, nullable=True)  # Filled on signup
+    height = Column(Integer, nullable=True)  # Filled on signup
+    profile_image_url = Column(String, nullable=True)  # Filled on signup
+    # created_at, updated_at from TimestampMixin
+```
+
+**Two States:**
+
+1. **Incomplete Player (before signup):**
+   - Created by admin during match processing
+   - `user_id = NULL`
+   - `is_linked = FALSE`
+   - Only basic fields filled
+
+2. **Complete Player (after signup):**
+   - Player completes signup using invite code
+   - `user_id` set (links to users table)
+   - `is_linked = TRUE`
+   - `linked_at = NOW()`
+   - All profile fields filled
+
+**Relationships:**
+- One-to-one with User (via `user_id`, NULL before signup)
+- Many-to-one with Club (via `club_id`)
+
+**Helper Methods:**
+```python
+@property
+def email(self):
+    return self.user.email if self.user else None
+
+@property
+def is_incomplete(self):
+    return not self.is_linked
+
+def complete_signup(self, user_id: str):
+    self.user_id = user_id
+    self.is_linked = True
+    self.linked_at = datetime.utcnow()
+```
+
+**Why This Exists:**
+- **Two-Phase Creation**: Admin creates players before they have accounts
+- **Invite System**: Players sign up using unique invite codes
+- **Flexible**: Handles incomplete state gracefully
+- **StatsBomb Integration**: Links players to event data
+
+**Constraints:**
+- user_id is UNIQUE when set (one player per user)
+- user_id is NULLABLE (incomplete players)
+- invite_code is UNIQUE (each code is one-time use)
+- CASCADE delete from both users and clubs
+
+**Connection to Other Files:**
+- Linked to: `user.py` (one-to-one, optional)
+- Linked to: `club.py` (many-to-one)
+- Tested in: `tests/test_models.py`
+
+---
+
+### 20. `app/models/__init__.py` - Models Package
+
+**Location:** `D:\Spinta_Backend\app\models\__init__.py`
+
+**Purpose:** Export all models for easy importing.
+
+**Content:**
+```python
+from app.models.base import Base
+from app.models.user import User
+from app.models.coach import Coach
+from app.models.club import Club
+from app.models.player import Player
+
+__all__ = [
+    "Base",
+    "User",
+    "Coach",
+    "Club",
+    "Player",
+]
+```
+
+**Why This Exists:**
+- **Convenience**: Import all models from one place
+- **Clean Imports**: `from app.models import User, Coach`
+- **Alembic**: Ensures all models are imported for autogenerate
+
+**Connection to Other Files:**
+- Imports from: All model files
+- Imported by: `alembic/env.py`, route handlers, tests
+
+---
+
+### 21. `alembic/env.py` - Alembic Configuration
+
+**Location:** `D:\Spinta_Backend\alembic\env.py`
+
+**Purpose:** Configure Alembic to detect models and run migrations.
+
+**Key Configuration:**
+```python
+from app.config import get_database_url
+from app.models.base import Base
+from app.models.user import User
+from app.models.coach import Coach
+from app.models.club import Club
+from app.models.player import Player
+
+config = context.config
+config.set_main_option('sqlalchemy.url', get_database_url())
+target_metadata = Base.metadata
+```
+
+**Why This Exists:**
+- **Database URL**: Loads from `.env` (no hardcoded credentials)
+- **Model Discovery**: Imports all models so Alembic can detect them
+- **Autogenerate**: Compares models with database to create migrations
+
+**What It Does:**
+1. Imports all models (registers them with Base.metadata)
+2. Overrides sqlalchemy.url from .env
+3. Provides metadata to Alembic
+4. Enables autogenerate feature
+
+**Connection to Other Files:**
+- Reads config from: `app.config`
+- Imports models from: `app.models`
+- Used by: `alembic revision --autogenerate`
+
+---
+
+### 22. `alembic/versions/` - Migration Files
+
+**Location:** `D:\Spinta_Backend\alembic\versions\cec718a67a72_initial_schema_with_users_coaches_clubs_.py`
+
+**Purpose:** Version-controlled database schema changes.
+
+**What Migration Files Contain:**
+```python
+def upgrade() -> None:
+    # Create tables
+    op.create_table('users', ...)
+    op.create_table('coaches', ...)
+    op.create_table('clubs', ...)
+    op.create_table('players', ...)
+
+    # Create indexes
+    op.create_index(...)
+
+def downgrade() -> None:
+    # Reverse all changes
+    op.drop_table('players')
+    op.drop_table('clubs')
+    op.drop_table('coaches')
+    op.drop_table('users')
+```
+
+**Why This Exists:**
+- **Version Control**: Track database schema changes over time
+- **Reproducibility**: Apply same schema to all environments
+- **Rollback**: Can undo changes with `alembic downgrade`
+- **Team Collaboration**: Everyone gets same database structure
+
+**Commands:**
+```bash
+# Generate migration from model changes
+alembic revision --autogenerate -m "description"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback one migration
+alembic downgrade -1
+
+# View current version
+alembic current
+```
+
+**Connection to Other Files:**
+- Generated from: Model changes
+- Applied to: Neon PostgreSQL database
+- Configured by: `alembic.ini`, `alembic/env.py`
+
+---
+
+### 23. `tests/conftest.py` - Test Fixtures
+
+**Location:** `D:\Spinta_Backend\tests\conftest.py`
+
+**Purpose:** Provide reusable test fixtures for database testing.
+
+**Key Fixtures:**
+
+#### **Engine Fixture:**
+```python
+@pytest.fixture(scope="function")
+def engine():
+    """Create in-memory SQLite database for each test"""
+    test_engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=test_engine)
+    yield test_engine
+    Base.metadata.drop_all(bind=test_engine)
+```
+
+#### **Session Fixture:**
+```python
+@pytest.fixture(scope="function")
+def session(engine):
+    """Create database session that rolls back after test"""
+    TestingSessionLocal = sessionmaker(bind=engine)
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.rollback()
+        db.close()
+```
+
+#### **Data Fixtures:**
+```python
+@pytest.fixture
+def sample_user(session):
+    """Pre-created user for testing"""
+    user = User(email="test@example.com", ...)
+    session.add(user)
+    session.commit()
+    return user
+
+@pytest.fixture
+def sample_coach(session, sample_user):
+    """Pre-created coach linked to sample_user"""
+    coach = Coach(user_id=sample_user.user_id, ...)
+    session.add(coach)
+    session.commit()
+    return coach
+
+# Similar fixtures for club, incomplete_player, complete_player
+```
+
+**Why This Exists:**
+- **Test Isolation**: Each test gets clean database
+- **Speed**: SQLite in-memory is fast
+- **Reusability**: Fixtures avoid duplicate code
+- **Dependencies**: Fixtures can depend on other fixtures
+
+**Connection to Other Files:**
+- Used by: `tests/test_models.py`
+- Imports from: `app.models`
+
+---
+
+### 24. `tests/test_models.py` - Model Tests
+
+**Location:** `D:\Spinta_Backend\tests\test_models.py`
+
+**Purpose:** Comprehensively test all database models.
+
+**Test Coverage:**
+
+#### **User Model Tests (5 tests):**
+- Create user with all fields
+- Email uniqueness constraint
+- `is_coach()` and `is_player()` methods
+- String representation
+
+#### **Coach Model Tests (7 tests):**
+- Create coach with user_id
+- user_id uniqueness constraint
+- One-to-one relationship with user
+- Convenience properties (email, full_name)
+- Optional fields can be NULL
+- CASCADE delete from user
+
+#### **Club Model Tests (7 tests):**
+- Create club with all fields
+- coach_id uniqueness constraint
+- statsbomb_team_id uniqueness constraint
+- One-to-one relationship with coach
+- Convenience properties
+- Optional fields can be NULL
+- CASCADE delete from coach
+
+#### **Player Model Tests (12 tests):**
+- Create incomplete player (user_id = NULL)
+- Create complete player (user_id set)
+- `complete_signup()` method
+- invite_code uniqueness constraint
+- user_id uniqueness when set
+- Relationships with club and user
+- Convenience properties
+- CASCADE deletes
+
+#### **Integration Tests (3 tests):**
+- Coach registration flow (user → coach → club)
+- Player signup flow (incomplete → signup → complete)
+- Cascade delete through entire chain
+
+**Total: 34 tests, all passing ✅**
+
+**Why This Exists:**
+- **Confidence**: Proves models work correctly
+- **Regression Prevention**: Catches bugs when code changes
+- **Documentation**: Tests show how models should be used
+- **Coverage**: Tests all relationships, constraints, and methods
+
+**Connection to Other Files:**
+- Tests: All model files
+- Uses fixtures from: `conftest.py`
+- Configured by: `pytest.ini`
+
+---
+
 ## How Files Connect
 
 ### Import Dependency Graph
