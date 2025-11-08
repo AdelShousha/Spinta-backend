@@ -466,6 +466,8 @@ def get_db():
 
 #### **Imports:**
 ```python
+from app.api.routes import health
+from app import __version__
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -474,6 +476,11 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import engine
 ```
+
+**Import Highlights:**
+- `from app import __version__`: Imports version string from `app/__init__.py`
+- Keeps version in single place (single source of truth)
+- Used in FastAPI app metadata for documentation
 
 #### **Lifespan Handler:**
 ```python
@@ -517,8 +524,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     description="Youth soccer analytics platform API",
-    version="0.1.0",
-    lifespan=lifespan,      # Register lifespan handler
+    version=__version__,     # Uses version from app/__init__.py
+    lifespan=lifespan,       # Register lifespan handler
     docs_url="/docs",        # Swagger UI at http://localhost:8000/docs
     redoc_url="/redoc"       # ReDoc at http://localhost:8000/redoc
 )
@@ -528,6 +535,7 @@ app = FastAPI(
 - The FastAPI application instance
 - Automatic interactive documentation at `/docs`
 - Alternative documentation at `/redoc`
+- **Version from `__init__.py`**: Displayed in API docs (single source of truth)
 - Lifespan events registered
 
 #### **CORS Middleware:**
@@ -554,26 +562,29 @@ async def root():
     return {
         "message": "Welcome to Spinta Backend API",
         "docs": "/docs",
-        "health": "/health"
+        "redoc": "/redoc"
     }
 ```
 
 **What this does:**
 - Provides a simple endpoint at `http://localhost:8000/`
-- Returns JSON with helpful links
-- `tags=["Root"]` groups it in docs
+- Returns JSON with helpful links to documentation
+- `tags=["Root"]` groups it in API docs
+- Points users to both Swagger UI (`/docs`) and ReDoc (`/redoc`)
 
 #### **Route Registration:**
 ```python
-from app.api.routes import health
+# Import at top of file:
+# from app.api.routes import health
+
 app.include_router(health.router, prefix="/api", tags=["Health"])
 ```
 
 **What this does:**
-- Imports the health router
-- Registers all routes from `health.router`
+- Registers all routes from `health.router` (imported at top)
 - Adds `/api` prefix (so `/health` becomes `/api/health`)
 - Tags all health routes as "Health" in docs
+- Router pattern allows organizing endpoints in separate files
 
 **Why This Exists:**
 - **Entry Point**: This is what `uvicorn` runs
@@ -711,55 +722,11 @@ Inject session → health_check() runs → SELECT 1 →
 Return JSON → get_db() closes session → Response
 ```
 
-#### **Detailed Health Check:**
-```python
-@router.get("/health/detailed")
-async def detailed_health_check(db: Session = Depends(get_db)):
-    """
-    Provide detailed health information.
-
-    Returns:
-        {
-            "status": "healthy",
-            "database": {
-                "status": "connected",
-                "version": "PostgreSQL 15.3..."
-            },
-            "api_version": "0.1.0"
-        }
-    """
-    database_status = "disconnected"
-    database_version = None
-
-    try:
-        # Get PostgreSQL version
-        result = db.execute(text("SELECT version()"))
-        version_info = result.scalar()
-        database_version = version_info.split(",")[0] if version_info else "Unknown"
-        database_status = "connected"
-    except Exception as e:
-        print(f"Detailed health check failed: {e}")
-
-    return {
-        "status": "healthy",
-        "database": {
-            "status": database_status,
-            "version": database_version
-        },
-        "api_version": "0.1.0"
-    }
-```
-
-**What this endpoint does:**
-- Similar to `/health` but with more details
-- Executes `SELECT version()` to get PostgreSQL version
-- Returns database version string
-- Useful for monitoring and debugging
-
 **Why This Exists:**
 - **Monitoring**: External tools can check if API is alive
 - **Debugging**: Quickly verify database connectivity
 - **Load Balancers**: Can route traffic away from unhealthy instances
+- **Simplicity**: Single endpoint, clear purpose
 
 **What It Does:**
 - Provides `/api/health` endpoint (after prefix from main.py)
@@ -825,71 +792,44 @@ client = TestClient(app)
 #### **Test Class:**
 ```python
 class TestHealthEndpoint:
-    """Group related tests together"""
+    """
+    Test Suite for Health Check Endpoint
+    """
 
-    def test_health_endpoint_exists(self):
-        """Test that endpoint returns 200 OK"""
-        response = client.get("/api/health")
-        assert response.status_code == 200
+    def test_health_check_full_response(self):
+        """
+        Test 1: Check endpoint status, structure, and values in one call.
 
-    def test_health_response_structure(self):
-        """Test that response has correct keys"""
+        This is the primary "happy path" test. It verifies:
+        - The endpoint returns 200 OK.
+        - The JSON keys ("status", "database") are correct.
+        - The JSON values ("healthy", "connected") are correct.
+        """
         response = client.get("/api/health")
+
+        # Test 1: Endpoint exists and is OK
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
         data = response.json()
 
-        assert "status" in data
-        assert "database" in data
+        # Test 2: Response structure (contract)
+        assert "status" in data, "Response missing 'status' key"
+        assert "database" in data, "Response missing 'database' key"
 
-    def test_health_status_value(self):
-        """Test that status is 'healthy'"""
-        response = client.get("/api/health")
-        data = response.json()
-
-        assert data["status"] == "healthy"
-
-    def test_health_database_connected(self):
-        """Test that database reports as connected"""
-        response = client.get("/api/health")
-        data = response.json()
-
-        assert isinstance(data["database"], str)
-        assert data["database"] in ["connected", "disconnected"]
-
-    def test_health_response_time(self):
-        """Test that health check is fast (< 1 second)"""
-        import time
-
-        start_time = time.time()
-        response = client.get("/api/health")
-        end_time = time.time()
-
-        response_time = end_time - start_time
-
-        assert response_time < 1.0
-        assert response.status_code == 200
+        # Test 3 & 4: Response values (logic)
+        assert data["status"] == "healthy", f"Expected 'healthy', got '{data['status']}'"
+        assert data["database"] == "connected", f"Expected 'connected', got '{data['database']}'"
 ```
 
-**What these tests do:**
+**What this test does:**
 
-1. **test_health_endpoint_exists**:
-   - Verifies endpoint is accessible
-   - Checks HTTP 200 status
-
-2. **test_health_response_structure**:
-   - Verifies JSON has required keys
-   - Ensures consistent response format
-
-3. **test_health_status_value**:
-   - Checks that status is "healthy"
-   - Verifies correct status value
-
-4. **test_health_database_connected**:
-   - Checks that database field exists
-   - Verifies it's one of the expected values
-
-5. **test_health_response_time**:
-   - Ensures endpoint responds quickly
-   - Performance check (< 1 second)
+**test_health_check_full_response**:
+   - **Comprehensive test**: Combines multiple assertions in one test
+   - **Endpoint availability**: Verifies endpoint returns 200 OK
+   - **Response structure**: Checks JSON has "status" and "database" keys
+   - **Response values**: Verifies status is "healthy" and database is "connected"
+   - **Efficient**: Single HTTP request tests all aspects
+   - **Clear error messages**: Each assertion includes descriptive error message
 
 **Why This Exists:**
 - **Confidence**: Proves code works as expected
