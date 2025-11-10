@@ -107,7 +107,7 @@ Stores club/team information.
 | club_name | VARCHAR(255) | NOT NULL | Club name |
 | statsbomb_team_id | INTEGER | UNIQUE, NULL | StatsBomb team ID |
 | country | VARCHAR(100) | NULL | Club country |
-| age_group | VARCHAR(20) | NULL | Team age group (e.g., "U16") |
+| age_group | ENUM | NULL | Team age group: U6, U8, U10, U12, U14, U16, U18, U21, or Senior (18+) |
 | stadium | VARCHAR(255) | NULL | Home stadium name |
 | logo_url | TEXT | NULL | Club logo image URL |
 | created_at | TIMESTAMP | NOT NULL | Club creation time |

@@ -87,18 +87,18 @@ class User(Base, TimestampMixin):
 
     # One-to-one with Coach
     coach = relationship(
-        "Coach",
+        "Coach",  # name of the related class
         back_populates="user",
         uselist=False,  # Single object, not a list
         cascade="all, delete-orphan"  # Delete coach if user is deleted
     )
 
     # One-to-one with Player (only populated after player completes signup)
+    # Note: No cascade - player persists even if user deletes account
     player = relationship(
         "Player",
         back_populates="user",
-        uselist=False,  # Single object, not a list
-        cascade="all, delete-orphan"  # Delete player if user is deleted
+        uselist=False  # Single object, not a list
     )
 
     def __repr__(self):
@@ -127,7 +127,6 @@ class User(Base, TimestampMixin):
             bool: True if user_type is 'player'
         """
         return self.user_type == "player"
-
 
 
 """

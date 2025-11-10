@@ -39,6 +39,8 @@ class GUID(TypeDecorator):
     impl = String
     cache_ok = True
 
+    # this is used when Table creation (Base.metadata.create_all()) Migration generation (alembic revision --autogenerate)
+    # tells SQLAlchemy what datatype to use in the actual database
     def load_dialect_impl(self, dialect):
         """
         Return appropriate type for the dialect.
@@ -57,6 +59,7 @@ class GUID(TypeDecorator):
     def process_bind_param(self, value, dialect):
         """
         Process value before sending to database.
+        postgresql converts the string sent to UUID automatically because it is of UUID type from the load_dialect_impl method
 
         Args:
             value: The UUID value (string or None)
@@ -85,8 +88,9 @@ class GUID(TypeDecorator):
         return str(value)
 
 
-# Create the declarative base
 # All models will inherit from this Base class
+# used to register all models so that SQLAlchemy and Alembic can track them
+# When you run alembic revision --autogenerate, Alembic looks at Base.metadata and compares it to the current database schema to generate migration scripts.
 Base = declarative_base()
 
 

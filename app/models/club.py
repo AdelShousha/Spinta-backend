@@ -23,10 +23,28 @@ Relationships:
 - One-to-many with Players (club has multiple players)
 """
 
-from sqlalchemy import Column, String, Integer, ForeignKey
+from sqlalchemy import Column, String, Integer, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
+import enum
 
 from app.models.base import Base, TimestampMixin, generate_uuid, GUID
+
+
+class AgeGroup(str, enum.Enum):
+    """
+    Age group categories for youth soccer teams.
+
+    Values represent maximum age for each category.
+    """
+    U6 = "U6"      # Under 6
+    U8 = "U8"      # Under 8
+    U10 = "U10"    # Under 10
+    U12 = "U12"    # Under 12
+    U14 = "U14"    # Under 14
+    U16 = "U16"    # Under 16
+    U18 = "U18"    # Under 18
+    U21 = "U21"    # Under 21
+    SENIOR = "Senior (18+)"  # Senior/Adult (18+)
 
 
 class Club(Base, TimestampMixin):
@@ -82,9 +100,9 @@ class Club(Base, TimestampMixin):
     )
 
     age_group = Column(
-        String(20),
+        SQLEnum(AgeGroup),
         nullable=True,
-        comment="Team age group (e.g., 'U16', 'U18')"
+        comment="Team age group (U6, U8, U10, U12, U14, U16, U18, U21, or Senior)"
     )
 
     stadium = Column(
@@ -162,13 +180,18 @@ club = Club(
     coach_id=coach.coach_id,
     club_name="Manchester City U16",
     country="England",
-    age_group="U16",
+    age_group=AgeGroup.U16,  # Use enum value
     stadium="Etihad Campus",
     logo_url="https://example.com/logos/mancity.png",
     # statsbomb_team_id is NULL initially
 )
 db.add(club)
 db.commit()
+
+# Available age groups:
+# AgeGroup.U6, AgeGroup.U8, AgeGroup.U10, AgeGroup.U12,
+# AgeGroup.U14, AgeGroup.U16, AgeGroup.U18, AgeGroup.U21,
+# AgeGroup.SENIOR
 
 # Later, when first match is uploaded, update statsbomb_team_id:
 club.statsbomb_team_id = 123

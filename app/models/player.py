@@ -3,6 +3,25 @@ Player Model
 
 Stores player profiles, including incomplete players (before signup).
 
+IMPORTANT - User Account Deletion Behavior:
+When a user deletes their account, the player record PERSISTS (not deleted).
+The Foreign Key is set to SET NULL, so:
+- user_id becomes NULL
+- Player reverts to incomplete state
+- Player can potentially be re-linked to a new account
+
+Future Implementation Note:
+When implementing user account deletion endpoint, consider also updating:
+- is_linked = False (mark as incomplete again)
+- linked_at = NULL (clear signup timestamp)
+This provides a clean state for potential re-linking.
+
+Example deletion logic:
+    if user.player:
+        user.player.is_linked = False
+        user.player.linked_at = None
+        # user_id will be set to NULL automatically by SET NULL cascade
+
 This model handles TWO states:
 
 1. Incomplete Player (before signup):
@@ -77,11 +96,11 @@ class Player(Base, TimestampMixin):
     # Foreign Key to Users table (NULL before signup)
     user_id = Column(
         GUID,
-        ForeignKey('users.user_id', ondelete='CASCADE'),  # Delete player if user is deleted
+        ForeignKey('users.user_id', ondelete='SET NULL'),  # Set to NULL if user deletes account
         unique=True,  # One player per user account
         nullable=True,  # NULL for incomplete players
         index=True,  # Index for fast lookups
-        comment="Reference to user account (NULL before signup)"
+        comment="Reference to user account (NULL before signup or after user deletion)"
     )
 
     # Foreign Key to Clubs table
