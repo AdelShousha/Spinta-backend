@@ -99,6 +99,13 @@ class Coach(Base, TimestampMixin):
         cascade="all, delete-orphan"  # Delete club if coach is deleted
     )
 
+    # One-to-many with TrainingPlans
+    # A coach can create multiple training plans for players
+    training_plans = relationship(
+        "TrainingPlan",
+        back_populates="coach"
+    )
+
     def __repr__(self):
         """
         String representation for debugging.
