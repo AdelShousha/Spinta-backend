@@ -382,3 +382,47 @@ class TestPlayerCRUD:
             session.commit()
 
         session.rollback()
+
+    def test_link_player_with_eager_loaded_relationships(self, session, sample_incomplete_player):
+        """
+        Test that link_player_to_user works with eager-loaded relationships.
+
+        This test specifically addresses a PostgreSQL issue where FOR UPDATE
+        cannot be applied to the nullable side of an outer join.
+
+        The Player model has lazy="joined" relationships (eager loading),
+        which causes SQLAlchemy to add LEFT OUTER JOINs. The fix uses
+        with_for_update(of=Player) to only lock the players table.
+
+        Scenario:
+        - Player has eager-loaded relationships (user, club)
+        - link_player_to_user should successfully lock only the Player row
+        - Registration completes without PostgreSQL FOR UPDATE error
+        """
+        # This test ensures the fix for:
+        # psycopg2.errors.FeatureNotSupported: FOR UPDATE cannot be applied
+        # to the nullable side of an outer join
+
+        invite_code = sample_incomplete_player.invite_code
+
+        # Attempt to link player - should work without PostgreSQL error
+        player = link_player_to_user(
+            db=session,
+            invite_code=invite_code,
+            player_name="Test Player With Joins",
+            email="jointest@example.com",
+            password="SecurePass123!",
+            birth_date=date(2008, 5, 15),
+            height=178
+        )
+
+        # Verify it worked
+        assert player.is_linked is True
+        assert player.user_id is not None
+        assert player.player_name == "Test Player With Joins"
+
+        # Verify the relationships are loaded (eager loading worked)
+        assert player.user is not None
+        assert player.club is not None
+
+        session.commit()
