@@ -62,7 +62,7 @@ Relationships:
 
 from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.base import Base, TimestampMixin, generate_uuid, GUID
 
@@ -244,11 +244,11 @@ class Player(Base, TimestampMixin):
         Usage:
             player.complete_signup(new_user.user_id)
             player.is_linked = True
-            player.linked_at = datetime.utcnow()
+            player.linked_at = datetime.now(timezone.utc)
         """
         self.user_id = user_id
         self.is_linked = True
-        self.linked_at = datetime.utcnow()
+        self.linked_at = datetime.now(timezone.utc)
 
 
 

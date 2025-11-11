@@ -18,6 +18,7 @@ Key Fixtures:
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from datetime import date, datetime
 
 from app.models.base import Base
@@ -25,6 +26,7 @@ from app.models.user import User
 from app.models.coach import Coach
 from app.models.club import Club
 from app.models.player import Player
+from app.core.security import get_password_hash
 
 
 # Test Database Configuration
@@ -44,13 +46,18 @@ def engine():
     - Isolated: Each test gets clean database
     - No cleanup needed: Database disappears after test
 
+    IMPORTANT: check_same_thread=False allows the in-memory database
+    to be accessed from FastAPI's threadpool during endpoint testing.
+
     Yields:
         SQLAlchemy Engine connected to in-memory SQLite database
     """
-    # Create engine
+    # Create engine with thread-safety for SQLite
+    # This is crucial for FastAPI TestClient which uses threads
     test_engine = create_engine(
         TEST_DATABASE_URL,
-        connect_args={"check_same_thread": False}  # SQLite-specific
+        connect_args={"check_same_thread": False},  # Allow cross-thread access
+        poolclass=StaticPool  # Use single connection pool for in-memory DB
     )
 
     # Create all tables
@@ -103,6 +110,7 @@ def sample_user(session):
     Create a sample user for testing.
 
     Useful for tests that need an existing user.
+    Password is "password123" (hashed with bcrypt).
 
     Args:
         session: Database session from session fixture
@@ -112,7 +120,7 @@ def sample_user(session):
     """
     user = User(
         email="test@example.com",
-        password_hash="$2b$12$test_hash",  # Mock bcrypt hash
+        password_hash=get_password_hash("password123"),  # Real bcrypt hash
         full_name="Test User",
         user_type="coach"
     )
@@ -208,6 +216,7 @@ def sample_player_user(session):
     Create a sample player user account for testing.
 
     This is separate from sample_user (which is a coach).
+    Password is "password123" (hashed with bcrypt).
 
     Args:
         session: Database session
@@ -217,7 +226,7 @@ def sample_player_user(session):
     """
     user = User(
         email="player@example.com",
-        password_hash="$2b$12$test_hash",
+        password_hash=get_password_hash("password123"),  # Real bcrypt hash
         full_name="Test Player User",
         user_type="player"
     )
