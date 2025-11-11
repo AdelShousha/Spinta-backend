@@ -14,10 +14,23 @@ from app.models.base import Base
 
 # Import all models so Alembic can detect them
 # IMPORTANT: Import all models here for autogenerate to work
-from app.models.user import User
-from app.models.coach import Coach
-from app.models.club import Club
-from app.models.player import Player
+from app.models import (
+    User,
+    Coach,
+    Club,
+    Player,
+    OpponentClub,
+    Match,
+    OpponentPlayer,
+    Goal,
+    Event,
+    MatchStatistics,
+    PlayerMatchStatistics,
+    ClubSeasonStatistics,
+    PlayerSeasonStatistics,
+    TrainingPlan,
+    TrainingExercise,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

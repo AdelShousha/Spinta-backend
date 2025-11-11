@@ -868,3 +868,799 @@ class TestFullDataFlow:
         assert session.query(Coach).filter(Coach.coach_id == coach_id).first() is None
         assert session.query(Club).filter(Club.club_id == club_id).first() is None
         assert session.query(Player).filter(Player.player_id == player_id).first() is None
+
+
+class TestMatchRelatedModels:
+    """
+    Test Suite for Match-Related Models
+
+    Compact tests covering OpponentClub, Match, OpponentPlayer, Goal, and Event models.
+    """
+
+    def test_opponent_club_creation(self, session):
+        """
+        Test OpponentClub model creation and constraints.
+
+        Scenarios:
+        - Create opponent club with all fields
+        - Verify auto-generated fields (opponent_club_id, created_at)
+        - Test statsbomb_team_id uniqueness constraint
+        - Test nullable fields (statsbomb_team_id, logo_url)
+        """
+        from app.models.opponent_club import OpponentClub
+
+        # Test successful creation with all fields
+        opponent = OpponentClub(
+            opponent_name="City Strikers",
+            statsbomb_team_id=912,
+            logo_url="https://example.com/opponent-logo.png"
+        )
+        session.add(opponent)
+        session.commit()
+        session.refresh(opponent)
+
+        # Verify all fields
+        assert opponent.opponent_club_id is not None
+        assert opponent.opponent_name == "City Strikers"
+        assert opponent.statsbomb_team_id == 912
+        assert opponent.logo_url == "https://example.com/opponent-logo.png"
+        assert opponent.created_at is not None
+
+        # Test statsbomb_team_id uniqueness
+        duplicate_sb_id = OpponentClub(
+            opponent_name="Different Team",
+            statsbomb_team_id=912  # Same StatsBomb ID
+        )
+        session.add(duplicate_sb_id)
+
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+        session.rollback()
+
+        # Test nullable fields
+        minimal_opponent = OpponentClub(
+            opponent_name="Minimal Opponent"
+        )
+        session.add(minimal_opponent)
+        session.commit()
+        session.refresh(minimal_opponent)
+
+        assert minimal_opponent.statsbomb_team_id is None
+        assert minimal_opponent.logo_url is None
+
+    def test_match_creation_and_relationships(self, session, sample_club):
+        """
+        Test Match model creation, relationships, and cascading.
+
+        Scenarios:
+        - Create match with club and opponent_club foreign keys
+        - Test nullable fields (opponent_club_id, match_time, scores)
+        - Test CASCADE delete for club_id
+        - Test SET NULL for opponent_club_id
+        """
+        from app.models.opponent_club import OpponentClub
+        from app.models.match import Match
+
+        # Create opponent club
+        opponent = OpponentClub(opponent_name="North Athletic")
+        session.add(opponent)
+        session.commit()
+        session.refresh(opponent)
+
+        # Test successful match creation with all fields
+        match = Match(
+            club_id=sample_club.club_id,
+            opponent_club_id=opponent.opponent_club_id,
+            opponent_name="North Athletic",
+            match_date=date(2025, 10, 8),
+            match_time=datetime.strptime("15:30:00", "%H:%M:%S").time(),
+            is_home_match=True,
+            home_score=3,
+            away_score=2
+        )
+        session.add(match)
+        session.commit()
+        session.refresh(match)
+
+        # Verify all fields
+        assert match.match_id is not None
+        assert match.club_id == sample_club.club_id
+        assert match.opponent_club_id == opponent.opponent_club_id
+        assert match.opponent_name == "North Athletic"
+        assert match.match_date == date(2025, 10, 8)
+        assert match.match_time is not None
+        assert match.is_home_match is True
+        assert match.home_score == 3
+        assert match.away_score == 2
+        assert match.created_at is not None
+        assert match.updated_at is not None
+
+        # Test relationships
+        assert match.club.club_id == sample_club.club_id
+        assert match.opponent_club.opponent_club_id == opponent.opponent_club_id
+
+        # Test nullable fields (match in progress, no final score yet)
+        upcoming_match = Match(
+            club_id=sample_club.club_id,
+            opponent_name="Future Opponent",
+            match_date=date(2025, 11, 15),
+            is_home_match=False
+        )
+        session.add(upcoming_match)
+        session.commit()
+        session.refresh(upcoming_match)
+
+        assert upcoming_match.opponent_club_id is None
+        assert upcoming_match.match_time is None
+        assert upcoming_match.home_score is None
+        assert upcoming_match.away_score is None
+
+        # Test CASCADE delete for club
+        match_id = match.match_id
+        session.delete(sample_club)
+        session.commit()
+
+        deleted_match = session.query(Match).filter(Match.match_id == match_id).first()
+        assert deleted_match is None
+
+    def test_opponent_player_creation(self, session):
+        """
+        Test OpponentPlayer model creation and relationships.
+
+        Scenarios:
+        - Create opponent player linked to opponent club
+        - Test CASCADE delete when opponent club deleted
+        - Test nullable fields
+        """
+        from app.models.opponent_club import OpponentClub
+        from app.models.opponent_player import OpponentPlayer
+
+        # Create opponent club
+        opponent_club = OpponentClub(opponent_name="Valley Rangers")
+        session.add(opponent_club)
+        session.commit()
+        session.refresh(opponent_club)
+
+        # Test opponent player creation
+        opponent_player = OpponentPlayer(
+            opponent_club_id=opponent_club.opponent_club_id,
+            player_name="John Doe",
+            statsbomb_player_id=8923,
+            jersey_number=9,
+            position="Center Forward"
+        )
+        session.add(opponent_player)
+        session.commit()
+        session.refresh(opponent_player)
+
+        # Verify all fields
+        assert opponent_player.opponent_player_id is not None
+        assert opponent_player.opponent_club_id == opponent_club.opponent_club_id
+        assert opponent_player.player_name == "John Doe"
+        assert opponent_player.statsbomb_player_id == 8923
+        assert opponent_player.jersey_number == 9
+        assert opponent_player.position == "Center Forward"
+        assert opponent_player.created_at is not None
+
+        # Test relationship
+        assert opponent_player.opponent_club.opponent_club_id == opponent_club.opponent_club_id
+
+        # Test CASCADE delete
+        player_id = opponent_player.opponent_player_id
+        session.delete(opponent_club)
+        session.commit()
+
+        deleted_player = session.query(OpponentPlayer).filter(
+            OpponentPlayer.opponent_player_id == player_id
+        ).first()
+        assert deleted_player is None
+
+    def test_goal_creation(self, session, sample_club):
+        """
+        Test Goal model creation and relationships.
+
+        Scenarios:
+        - Create goal linked to match
+        - Test nullable assist_name
+        - Test CASCADE delete when match deleted
+        """
+        from app.models.opponent_club import OpponentClub
+        from app.models.match import Match
+        from app.models.goal import Goal
+
+        # Create match
+        match = Match(
+            club_id=sample_club.club_id,
+            opponent_name="Harbor FC",
+            match_date=date(2025, 9, 28),
+            is_home_match=True,
+            home_score=2,
+            away_score=1
+        )
+        session.add(match)
+        session.commit()
+        session.refresh(match)
+
+        # Test goal creation with assist
+        goal = Goal(
+            match_id=match.match_id,
+            team_name="Thunder United FC",
+            scorer_name="Marcus Silva",
+            assist_name="Jake Thompson",
+            minute=23,
+            second=45,
+            period=1,
+            goal_type="Open Play",
+            body_part="Right Foot"
+        )
+        session.add(goal)
+        session.commit()
+        session.refresh(goal)
+
+        # Verify all fields
+        assert goal.goal_id is not None
+        assert goal.match_id == match.match_id
+        assert goal.team_name == "Thunder United FC"
+        assert goal.scorer_name == "Marcus Silva"
+        assert goal.assist_name == "Jake Thompson"
+        assert goal.minute == 23
+        assert goal.second == 45
+        assert goal.period == 1
+        assert goal.goal_type == "Open Play"
+        assert goal.body_part == "Right Foot"
+        assert goal.created_at is not None
+
+        # Test relationship
+        assert goal.match.match_id == match.match_id
+
+        # Test nullable assist (unassisted goal)
+        unassisted_goal = Goal(
+            match_id=match.match_id,
+            team_name="Thunder United FC",
+            scorer_name="David Chen",
+            minute=78,
+            period=2,
+            goal_type="Penalty"
+        )
+        session.add(unassisted_goal)
+        session.commit()
+        session.refresh(unassisted_goal)
+
+        assert unassisted_goal.assist_name is None
+
+        # Test CASCADE delete
+        goal_id = goal.goal_id
+        session.delete(match)
+        session.commit()
+
+        deleted_goal = session.query(Goal).filter(Goal.goal_id == goal_id).first()
+        assert deleted_goal is None
+
+    def test_event_jsonb_storage(self, session, sample_club):
+        """
+        Test Event model with JSONB data storage and querying.
+
+        Scenarios:
+        - Create event with JSONB event_data
+        - Store and retrieve complex nested JSON
+        - Test JSONB query with @> operator (PostgreSQL) or JSON functions (SQLite)
+        - Test CASCADE delete when match deleted
+        """
+        from app.models.match import Match
+        from app.models.event import Event
+
+        # Create match
+        match = Match(
+            club_id=sample_club.club_id,
+            opponent_name="Phoenix United",
+            match_date=date(2025, 9, 24),
+            is_home_match=False
+        )
+        session.add(match)
+        session.commit()
+        session.refresh(match)
+
+        # Test event creation with complex JSONB data
+        event_data = {
+            "id": "event-uuid-123",
+            "type": {"id": 16, "name": "Shot"},
+            "player": {"id": 5470, "name": "Marcus Silva"},
+            "team": {"id": 746, "name": "Thunder United FC"},
+            "period": 1,
+            "timestamp": "00:12:34.567",
+            "location": [102.3, 34.5],
+            "shot": {
+                "statsbomb_xg": 0.45,
+                "outcome": {"id": 97, "name": "Goal"},
+                "type": {"id": 87, "name": "Open Play"},
+                "body_part": {"id": 40, "name": "Right Foot"}
+            }
+        }
+
+        event = Event(
+            match_id=match.match_id,
+            statsbomb_player_id=5470,
+            statsbomb_team_id=746,
+            player_name="Marcus Silva",
+            team_name="Thunder United FC",
+            event_type_name="Shot",
+            position_name="Center Forward",
+            minute=12,
+            second=34,
+            period=1,
+            event_data=event_data
+        )
+        session.add(event)
+        session.commit()
+        session.refresh(event)
+
+        # Verify all fields
+        assert event.event_id is not None
+        assert event.match_id == match.match_id
+        assert event.statsbomb_player_id == 5470
+        assert event.player_name == "Marcus Silva"
+        assert event.event_type_name == "Shot"
+        assert event.created_at is not None
+
+        # Verify JSONB storage and retrieval
+        assert event.event_data is not None
+        assert isinstance(event.event_data, dict)
+        assert event.event_data["type"]["name"] == "Shot"
+        assert event.event_data["shot"]["statsbomb_xg"] == 0.45
+        assert event.event_data["shot"]["outcome"]["name"] == "Goal"
+
+        # Test relationship
+        assert event.match.match_id == match.match_id
+
+        # Test CASCADE delete
+        event_id = event.event_id
+        session.delete(match)
+        session.commit()
+
+        deleted_event = session.query(Event).filter(Event.event_id == event_id).first()
+        assert deleted_event is None
+
+
+class TestStatisticsModels:
+    """
+    Test Suite for Statistics Models
+    Compact tests covering MatchStatistics, PlayerMatchStatistics,
+    ClubSeasonStatistics, and PlayerSeasonStatistics models.
+    """
+
+    def test_match_statistics_creation(self, session, sample_club):
+        """
+        Test MatchStatistics model creation.
+
+        Scenarios:
+        - Create statistics for both teams (our_team, opponent_team)
+        - Test unique constraint on (match_id, team_type)
+        - Test CASCADE delete when match deleted
+        """
+        from app.models.match import Match
+        from app.models.match_statistics import MatchStatistics
+        from decimal import Decimal
+
+        # Create match
+        match = Match(
+            club_id=sample_club.club_id,
+            opponent_name="Test Opponent",
+            match_date=date(2025, 10, 1),
+            is_home_match=True,
+            home_score=2,
+            away_score=1
+        )
+        session.add(match)
+        session.commit()
+        session.refresh(match)
+
+        # Create statistics for our team
+        our_stats = MatchStatistics(
+            match_id=match.match_id,
+            team_type="our_team",
+            possession_percentage=Decimal("55.5"),
+            expected_goals=Decimal("2.145678"),
+            total_shots=15,
+            shots_on_target=8,
+            total_passes=450,
+            passes_completed=390,
+            pass_completion_rate=Decimal("86.67")
+        )
+        session.add(our_stats)
+        session.commit()
+        session.refresh(our_stats)
+
+        # Verify our team stats
+        assert our_stats.statistics_id is not None
+        assert our_stats.match_id == match.match_id
+        assert our_stats.team_type == "our_team"
+        assert our_stats.possession_percentage == Decimal("55.5")
+        assert our_stats.expected_goals == Decimal("2.145678")
+        assert our_stats.created_at is not None
+
+        # Create statistics for opponent
+        opponent_stats = MatchStatistics(
+            match_id=match.match_id,
+            team_type="opponent_team",
+            possession_percentage=Decimal("44.5"),
+            expected_goals=Decimal("1.234567"),
+            total_shots=10,
+            shots_on_target=5
+        )
+        session.add(opponent_stats)
+        session.commit()
+        session.refresh(opponent_stats)
+
+        # Verify 2 records exist for this match
+        all_stats = session.query(MatchStatistics).filter(
+            MatchStatistics.match_id == match.match_id
+        ).all()
+        assert len(all_stats) == 2
+
+        # Test CASCADE delete
+        stats_id = our_stats.statistics_id
+        session.delete(match)
+        session.commit()
+
+        deleted_stats = session.query(MatchStatistics).filter(
+            MatchStatistics.statistics_id == stats_id
+        ).first()
+        assert deleted_stats is None
+
+    def test_player_match_statistics_creation(self, session, sample_club):
+        """
+        Test PlayerMatchStatistics model creation.
+
+        Scenarios:
+        - Create player stats for a match
+        - Test unique constraint on (player_id, match_id)
+        - Test CASCADE delete when player or match deleted
+        """
+        from app.models.player import Player
+        from app.models.match import Match
+        from app.models.player_match_statistics import PlayerMatchStatistics
+        from decimal import Decimal
+
+        # Create player
+        player = Player(
+            club_id=sample_club.club_id,
+            player_name="Test Player",
+            jersey_number=10,
+            position="Forward",
+            invite_code="TST-1234"
+        )
+        session.add(player)
+
+        # Create match
+        match = Match(
+            club_id=sample_club.club_id,
+            opponent_name="Test Opponent",
+            match_date=date(2025, 10, 1),
+            is_home_match=True
+        )
+        session.add(match)
+        session.commit()
+        session.refresh(player)
+        session.refresh(match)
+
+        # Create player match stats
+        player_stats = PlayerMatchStatistics(
+            player_id=player.player_id,
+            match_id=match.match_id,
+            goals=2,
+            assists=1,
+            expected_goals=Decimal("1.456789"),
+            shots=5,
+            shots_on_target=3,
+            total_passes=45,
+            completed_passes=38
+        )
+        session.add(player_stats)
+        session.commit()
+        session.refresh(player_stats)
+
+        # Verify all fields
+        assert player_stats.player_match_stats_id is not None
+        assert player_stats.player_id == player.player_id
+        assert player_stats.match_id == match.match_id
+        assert player_stats.goals == 2
+        assert player_stats.assists == 1
+        assert player_stats.expected_goals == Decimal("1.456789")
+        assert player_stats.created_at is not None
+
+        # Test CASCADE delete when match deleted
+        stats_id = player_stats.player_match_stats_id
+        session.delete(match)
+        session.commit()
+
+        deleted_stats = session.query(PlayerMatchStatistics).filter(
+            PlayerMatchStatistics.player_match_stats_id == stats_id
+        ).first()
+        assert deleted_stats is None
+
+    def test_club_season_statistics_creation(self, session, sample_club):
+        """
+        Test ClubSeasonStatistics model creation.
+
+        Scenarios:
+        - Create season statistics for club
+        - Test UNIQUE constraint on club_id
+        - Test CASCADE delete when club deleted
+        """
+        from app.models.club_season_statistics import ClubSeasonStatistics
+        from decimal import Decimal
+
+        # Create club season statistics
+        club_stats = ClubSeasonStatistics(
+            club_id=sample_club.club_id,
+            matches_played=10,
+            wins=6,
+            draws=2,
+            losses=2,
+            goals_scored=22,
+            goals_conceded=12,
+            total_clean_sheets=4,
+            avg_goals_per_match=Decimal("2.20"),
+            avg_possession_percentage=Decimal("54.5"),
+            avg_xg_per_match=Decimal("1.85"),
+            pass_completion_rate=Decimal("82.3")
+        )
+        session.add(club_stats)
+        session.commit()
+        session.refresh(club_stats)
+
+        # Verify all fields
+        assert club_stats.club_stats_id is not None
+        assert club_stats.club_id == sample_club.club_id
+        assert club_stats.matches_played == 10
+        assert club_stats.wins == 6
+        assert club_stats.draws == 2
+        assert club_stats.losses == 2
+        assert club_stats.goals_scored == 22
+        assert club_stats.avg_goals_per_match == Decimal("2.20")
+        assert club_stats.updated_at is not None
+
+        # Test CASCADE delete when club deleted
+        stats_id = club_stats.club_stats_id
+        session.delete(sample_club)
+        session.commit()
+
+        deleted_stats = session.query(ClubSeasonStatistics).filter(
+            ClubSeasonStatistics.club_stats_id == stats_id
+        ).first()
+        assert deleted_stats is None
+
+    def test_player_season_statistics_creation(self, session, sample_club):
+        """
+        Test PlayerSeasonStatistics model creation.
+
+        Scenarios:
+        - Create season statistics for player
+        - Test UNIQUE constraint on player_id
+        - Test CASCADE delete when player deleted
+        """
+        from app.models.player import Player
+        from app.models.player_season_statistics import PlayerSeasonStatistics
+        from decimal import Decimal
+
+        # Create player
+        player = Player(
+            club_id=sample_club.club_id,
+            player_name="Star Player",
+            jersey_number=7,
+            position="Midfielder",
+            invite_code="STR-7777"
+        )
+        session.add(player)
+        session.commit()
+        session.refresh(player)
+
+        # Create player season statistics
+        player_stats = PlayerSeasonStatistics(
+            player_id=player.player_id,
+            matches_played=8,
+            goals=12,
+            assists=5,
+            expected_goals=Decimal("10.567891"),
+            shots_per_game=Decimal("3.5"),
+            shots_on_target_per_game=Decimal("2.1"),
+            total_passes=320,
+            passes_completed=275,
+            attacking_rating=85,
+            technique_rating=78,
+            tactical_rating=72,
+            defending_rating=55,
+            creativity_rating=80
+        )
+        session.add(player_stats)
+        session.commit()
+        session.refresh(player_stats)
+
+        # Verify all fields
+        assert player_stats.player_stats_id is not None
+        assert player_stats.player_id == player.player_id
+        assert player_stats.matches_played == 8
+        assert player_stats.goals == 12
+        assert player_stats.assists == 5
+        assert player_stats.expected_goals == Decimal("10.567891")
+        assert player_stats.attacking_rating == 85
+        assert player_stats.technique_rating == 78
+        assert player_stats.updated_at is not None
+
+        # Test CASCADE delete when player deleted
+        stats_id = player_stats.player_stats_id
+        session.delete(player)
+        session.commit()
+
+        deleted_stats = session.query(PlayerSeasonStatistics).filter(
+            PlayerSeasonStatistics.player_stats_id == stats_id
+        ).first()
+        assert deleted_stats is None
+
+
+class TestTrainingModels:
+    """
+    Test Suite for Training Models
+    Compact tests covering TrainingPlan and TrainingExercise models.
+    """
+
+    def test_training_plan_creation(self, session, sample_club, sample_coach):
+        """
+        Test TrainingPlan model creation.
+
+        Scenarios:
+        - Create training plan for player
+        - Test status field and default value
+        - Test CASCADE delete when player or coach deleted
+        """
+        from app.models.player import Player
+        from app.models.training_plan import TrainingPlan
+
+        # Create player
+        player = Player(
+            club_id=sample_club.club_id,
+            player_name="Training Player",
+            jersey_number=5,
+            position="Midfielder",
+            invite_code="TRN-5555"
+        )
+        session.add(player)
+        session.commit()
+        session.refresh(player)
+
+        # Create training plan
+        plan = TrainingPlan(
+            player_id=player.player_id,
+            created_by=sample_coach.coach_id,
+            plan_name="Speed and Agility Training",
+            duration="2 weeks",
+            status="pending",
+            coach_notes="Focus on quick direction changes"
+        )
+        session.add(plan)
+        session.commit()
+        session.refresh(plan)
+
+        # Verify all fields
+        assert plan.plan_id is not None
+        assert plan.player_id == player.player_id
+        assert plan.created_by == sample_coach.coach_id
+        assert plan.plan_name == "Speed and Agility Training"
+        assert plan.duration == "2 weeks"
+        assert plan.status == "pending"
+        assert plan.coach_notes == "Focus on quick direction changes"
+        assert plan.created_at is not None
+
+        # Test status values
+        plan.status = "in_progress"
+        session.commit()
+        assert plan.status == "in_progress"
+
+        # Test CASCADE delete when player deleted
+        plan_id = plan.plan_id
+        session.delete(player)
+        session.commit()
+
+        deleted_plan = session.query(TrainingPlan).filter(
+            TrainingPlan.plan_id == plan_id
+        ).first()
+        assert deleted_plan is None
+
+    def test_training_exercise_creation(self, session, sample_club, sample_coach):
+        """
+        Test TrainingExercise model creation.
+
+        Scenarios:
+        - Create exercises for a training plan
+        - Test completion tracking (completed, completed_at)
+        - Test CASCADE delete when plan deleted
+        - Test exercise_order
+        """
+        from app.models.player import Player
+        from app.models.training_plan import TrainingPlan
+        from app.models.training_exercise import TrainingExercise
+        from datetime import datetime
+
+        # Create player and plan
+        player = Player(
+            club_id=sample_club.club_id,
+            player_name="Exercise Player",
+            jersey_number=9,
+            position="Forward",
+            invite_code="EXR-9999"
+        )
+        session.add(player)
+        session.commit()
+        session.refresh(player)
+
+        plan = TrainingPlan(
+            player_id=player.player_id,
+            created_by=sample_coach.coach_id,
+            plan_name="Shooting Drills",
+            status="pending"
+        )
+        session.add(plan)
+        session.commit()
+        session.refresh(plan)
+
+        # Create first exercise
+        exercise1 = TrainingExercise(
+            plan_id=plan.plan_id,
+            exercise_name="Dribbling through cones",
+            description="Set up 10 cones in a line, dribble through them",
+            sets="3",
+            reps="10",
+            exercise_order=1,
+            completed=False
+        )
+        session.add(exercise1)
+
+        # Create second exercise
+        exercise2 = TrainingExercise(
+            plan_id=plan.plan_id,
+            exercise_name="Shooting practice",
+            description="Practice shooting from different angles",
+            duration_minutes="15",
+            exercise_order=2,
+            completed=True,
+            completed_at=datetime.now()
+        )
+        session.add(exercise2)
+        session.commit()
+        session.refresh(exercise1)
+        session.refresh(exercise2)
+
+        # Verify first exercise
+        assert exercise1.exercise_id is not None
+        assert exercise1.plan_id == plan.plan_id
+        assert exercise1.exercise_name == "Dribbling through cones"
+        assert exercise1.sets == "3"
+        assert exercise1.reps == "10"
+        assert exercise1.exercise_order == 1
+        assert exercise1.completed is False
+        assert exercise1.completed_at is None
+        assert exercise1.created_at is not None
+
+        # Verify second exercise
+        assert exercise2.exercise_order == 2
+        assert exercise2.completed is True
+        assert exercise2.completed_at is not None
+        assert exercise2.duration_minutes == "15"
+
+        # Test marking exercise as completed
+        exercise1.completed = True
+        exercise1.completed_at = datetime.now()
+        session.commit()
+        assert exercise1.completed is True
+        assert exercise1.completed_at is not None
+
+        # Test CASCADE delete when plan deleted
+        exercise_id = exercise1.exercise_id
+        session.delete(plan)
+        session.commit()
+
+        deleted_exercise = session.query(TrainingExercise).filter(
+            TrainingExercise.exercise_id == exercise_id
+        ).first()
+        assert deleted_exercise is None

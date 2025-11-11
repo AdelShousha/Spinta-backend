@@ -202,6 +202,21 @@ class Player(Base, TimestampMixin):
         lazy="joined"  # Eager load club data
     )
 
+    # One-to-one with PlayerSeasonStatistics
+    season_statistics = relationship(
+        "PlayerSeasonStatistics",
+        back_populates="player",
+        cascade="all, delete-orphan",
+        uselist=False
+    )
+
+    # One-to-many with TrainingPlans
+    training_plans = relationship(
+        "TrainingPlan",
+        back_populates="player",
+        cascade="all, delete-orphan"
+    )
+
     def __repr__(self):
         """
         String representation for debugging.

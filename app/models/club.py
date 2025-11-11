@@ -139,6 +139,22 @@ class Club(Base, TimestampMixin):
         cascade="all, delete-orphan"  # Delete players if club is deleted
     )
 
+    # One-to-many with Matches
+    # A club has multiple matches
+    matches = relationship(
+        "Match",
+        back_populates="club",
+        cascade="all, delete-orphan"  # Delete matches if club is deleted
+    )
+
+    # One-to-one with ClubSeasonStatistics
+    season_statistics = relationship(
+        "ClubSeasonStatistics",
+        back_populates="club",
+        cascade="all, delete-orphan",
+        uselist=False
+    )
+
     def __repr__(self):
         """
         String representation for debugging.
