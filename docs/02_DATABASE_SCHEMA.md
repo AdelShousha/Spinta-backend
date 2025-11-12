@@ -239,7 +239,6 @@ Stores match records.
 | home_score | INTEGER | NULL | Final home team score |
 | away_score | INTEGER | NULL | Final away team score |
 | created_at | TIMESTAMP | NOT NULL | Record creation time |
-| updated_at | TIMESTAMP | NOT NULL | Last update time |
 
 **Indexes:**
 - `idx_matches_club_id` on `club_id`
@@ -514,6 +513,7 @@ Aggregated season statistics for clubs.
 | interception_success_rate | DECIMAL(5,2) | NULL | Overall interception success % |
 | avg_ball_recoveries | DECIMAL(5,2) | NULL | Avg ball recoveries |
 | avg_saves_per_match | DECIMAL(5,2) | NULL | Avg goalkeeper saves |
+| created_at | TIMESTAMP | NOT NULL | Record creation time |
 | updated_at | TIMESTAMP | NOT NULL | Last calculation time |
 
 **Indexes:**
@@ -558,6 +558,7 @@ Aggregated season statistics for players.
 | tactical_rating | INTEGER | NULL | Tactical attribute (0-100) |
 | defending_rating | INTEGER | NULL | Defending attribute (0-100) |
 | creativity_rating | INTEGER | NULL | Creativity attribute (0-100) |
+| created_at | TIMESTAMP | NOT NULL | Record creation time |
 | updated_at | TIMESTAMP | NOT NULL | Last calculation time |
 
 **Indexes:**
@@ -590,6 +591,7 @@ Stores training plans assigned to players.
 | coach_notes | TEXT | NULL | Instructions from coach |
 | created_by | UUID | FOREIGN KEY → coaches(coach_id), NOT NULL | Coach who created plan |
 | created_at | TIMESTAMP | NOT NULL | Plan creation time |
+| updated_at | TIMESTAMP | NOT NULL | Last update time |
 
 **Indexes:**
 - `idx_training_plans_player_id` on `player_id`
@@ -627,6 +629,7 @@ Stores individual exercises within training plans.
 | completed | BOOLEAN | NOT NULL, DEFAULT FALSE | Has player completed this? |
 | completed_at | TIMESTAMP | NULL | When player marked complete |
 | created_at | TIMESTAMP | NOT NULL | Exercise creation time |
+| updated_at | TIMESTAMP | NOT NULL | Last update time |
 
 **Indexes:**
 - `idx_training_exercises_plan_id` on `plan_id`

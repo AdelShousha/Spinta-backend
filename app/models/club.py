@@ -23,7 +23,7 @@ Relationships:
 - One-to-many with Players (club has multiple players)
 """
 
-from sqlalchemy import Column, String, Integer, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, String, Integer, ForeignKey, Text, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 import enum
 
@@ -112,7 +112,7 @@ class Club(Base, TimestampMixin):
     )
 
     logo_url = Column(
-        String,  # TEXT type for long URLs
+        Text,
         nullable=True,
         comment="Club logo image URL"
     )

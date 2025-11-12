@@ -25,15 +25,18 @@ from app.models.user import User
 from app.models.coach import Coach
 from app.models.club import Club, AgeGroup
 from app.models.player import Player
+
 from app.models.opponent_club import OpponentClub
 from app.models.match import Match
 from app.models.opponent_player import OpponentPlayer
 from app.models.goal import Goal
 from app.models.event import Event
+
 from app.models.match_statistics import MatchStatistics
 from app.models.player_match_statistics import PlayerMatchStatistics
 from app.models.club_season_statistics import ClubSeasonStatistics
 from app.models.player_season_statistics import PlayerSeasonStatistics
+
 from app.models.training_plan import TrainingPlan
 from app.models.training_exercise import TrainingExercise
 

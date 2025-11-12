@@ -60,7 +60,7 @@ Relationships:
 - One-to-one with User (after signup, via user_id)
 """
 
-from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
@@ -176,7 +176,7 @@ class Player(Base, TimestampMixin):
     )
 
     profile_image_url = Column(
-        String,  # TEXT type for long URLs
+        Text,
         nullable=True,  # NULL until signup
         comment="Profile photo URL (filled on signup)"
     )

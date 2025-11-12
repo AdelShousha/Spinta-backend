@@ -9,12 +9,12 @@ Key Features:
 - Contains multiple exercises
 """
 
-from sqlalchemy import Column, String, ForeignKey, DateTime, Index, Text, func
+from sqlalchemy import Column, String, ForeignKey, Index, Text
 from sqlalchemy.orm import relationship
-from app.models.base import Base, GUID, generate_uuid
+from app.models.base import Base, TimestampMixin, GUID, generate_uuid
 
 
-class TrainingPlan(Base):
+class TrainingPlan(Base, TimestampMixin):
     """
     Training Plan Model
 
@@ -29,6 +29,7 @@ class TrainingPlan(Base):
         status: Current status ('pending', 'in_progress', 'completed')
         coach_notes: Instructions from coach
         created_at: Timestamp when plan was created
+        updated_at: Timestamp when plan was last updated
 
     Relationships:
         - player: Many-to-one with Player model
@@ -87,13 +88,8 @@ class TrainingPlan(Base):
         comment="Instructions from coach"
     )
 
-    # Timestamp (created_at only, no updated_at)
-    created_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        comment="Plan creation time"
-    )
+    # Timestamps inherited from TimestampMixin
+    # created_at, updated_at
 
     # Relationships
     player = relationship("Player", back_populates="training_plans")

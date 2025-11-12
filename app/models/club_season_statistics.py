@@ -10,12 +10,12 @@ Key Features:
 - Used for coach dashboard display
 """
 
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, Index, func, Numeric
+from sqlalchemy import Column, Integer, ForeignKey, Index, Numeric
 from sqlalchemy.orm import relationship
-from app.models.base import Base, GUID, generate_uuid
+from app.models.base import Base, TimestampMixin, GUID, generate_uuid
 
 
-class ClubSeasonStatistics(Base):
+class ClubSeasonStatistics(Base, TimestampMixin):
     """
     Club Season Statistics Model
 
@@ -103,14 +103,8 @@ class ClubSeasonStatistics(Base):
     avg_ball_recoveries = Column(Numeric(5, 2), nullable=True, comment="Avg ball recoveries")
     avg_saves_per_match = Column(Numeric(5, 2), nullable=True, comment="Avg goalkeeper saves")
 
-    # Timestamp (updated_at only)
-    updated_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-        comment="Last calculation time"
-    )
+    # Timestamps inherited from TimestampMixin
+    # created_at, updated_at
 
     # Relationships
     club = relationship("Club", back_populates="season_statistics", uselist=False)

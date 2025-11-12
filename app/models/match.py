@@ -10,12 +10,12 @@ Key Features:
 - Created by coach uploading match video and StatsBomb data
 """
 
-from sqlalchemy import Column, String, Date, Time, Boolean, Integer, ForeignKey, Index
+from sqlalchemy import Column, String, Date, Time, Boolean, Integer, ForeignKey, DateTime, Index, func
 from sqlalchemy.orm import relationship
-from app.models.base import Base, TimestampMixin, GUID, generate_uuid
+from app.models.base import Base, GUID, generate_uuid
 
 
-class Match(Base, TimestampMixin):
+class Match(Base):
     """
     Match Model
 
@@ -32,7 +32,6 @@ class Match(Base, TimestampMixin):
         home_score: Final home team score (nullable until match complete)
         away_score: Final away team score (nullable until match complete)
         created_at: Timestamp when record was created
-        updated_at: Timestamp when record was last updated
 
     Relationships:
         - club: Many-to-one with Club model
@@ -104,8 +103,13 @@ class Match(Base, TimestampMixin):
         comment="Final away team score (NULL until match complete)"
     )
 
-    # Timestamps inherited from TimestampMixin
-    # created_at, updated_at
+    # Timestamp
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="Timestamp when record was created"
+    )
 
     # Relationships
     club = relationship("Club", back_populates="matches")

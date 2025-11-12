@@ -10,12 +10,12 @@ Key Features:
 - Attributes calculated from season stats using formulas
 """
 
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, Index, func, Numeric
+from sqlalchemy import Column, Integer, ForeignKey, Index, Numeric
 from sqlalchemy.orm import relationship
-from app.models.base import Base, GUID, generate_uuid
+from app.models.base import Base, TimestampMixin, GUID, generate_uuid
 
 
-class PlayerSeasonStatistics(Base):
+class PlayerSeasonStatistics(Base, TimestampMixin):
     """
     Player Season Statistics Model
 
@@ -97,14 +97,8 @@ class PlayerSeasonStatistics(Base):
     defending_rating = Column(Integer, nullable=True, comment="Defending attribute (0-100)")
     creativity_rating = Column(Integer, nullable=True, comment="Creativity attribute (0-100)")
 
-    # Timestamp (updated_at only)
-    updated_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-        comment="Last calculation time"
-    )
+    # Timestamps inherited from TimestampMixin
+    # created_at, updated_at
 
     # Relationships
     player = relationship("Player", back_populates="season_statistics", uselist=False)

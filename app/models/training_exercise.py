@@ -9,12 +9,12 @@ Key Features:
 - Flexible parameters (sets, reps, duration stored as strings)
 """
 
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Index, Text, Boolean, func
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Index, Text, Boolean
 from sqlalchemy.orm import relationship
-from app.models.base import Base, GUID, generate_uuid
+from app.models.base import Base, TimestampMixin, GUID, generate_uuid
 
 
-class TrainingExercise(Base):
+class TrainingExercise(Base, TimestampMixin):
     """
     Training Exercise Model
 
@@ -32,6 +32,7 @@ class TrainingExercise(Base):
         completed: Has player completed this exercise?
         completed_at: When player marked it complete
         created_at: Timestamp when exercise was created
+        updated_at: Timestamp when exercise was last updated
 
     Relationships:
         - plan: Many-to-one with TrainingPlan model
@@ -106,13 +107,8 @@ class TrainingExercise(Base):
         comment="When player marked it complete"
     )
 
-    # Timestamp (created_at only, no updated_at)
-    created_at = Column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        comment="Exercise creation time"
-    )
+    # Timestamps inherited from TimestampMixin
+    # created_at, updated_at
 
     # Relationships
     plan = relationship("TrainingPlan", back_populates="exercises")
