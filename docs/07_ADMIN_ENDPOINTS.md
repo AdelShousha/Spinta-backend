@@ -22,6 +22,8 @@ All endpoints require:
 
 **Authentication:** Required (Coach only)
 
+**TODO:** Update this endpoint for new matches schema. Must calculate and store `our_score`, `opponent_score`, and `result` fields (instead of `home_score`, `away_score`, `is_home_match`). Do not store `match_time`. Must also update `team_form` in club_season_statistics after each match.
+
 **Request:**
 ```json
 POST /api/coach/matches HTTP/1.1

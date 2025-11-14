@@ -225,7 +225,7 @@ Stores opponent team information (not managed by our coaches).
 
 ### 6. matches
 
-Stores match records.
+Stores match records from our club's perspective.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -234,10 +234,9 @@ Stores match records.
 | opponent_club_id | UUID | FOREIGN KEY → opponent_clubs(opponent_club_id) | Opponent team |
 | opponent_name | VARCHAR(255) | NOT NULL | Opponent name (denormalized) |
 | match_date | DATE | NOT NULL | Match date |
-| match_time | TIME | NULL | Match kickoff time |
-| is_home_match | BOOLEAN | NOT NULL | Is this a home match? |
-| home_score | INTEGER | NULL | Final home team score |
-| away_score | INTEGER | NULL | Final away team score |
+| our_score | INTEGER | NULL | Our club's final score |
+| opponent_score | INTEGER | NULL | Opponent's final score |
+| result | VARCHAR(1) | NULL | Match result: 'W' (win), 'L' (loss), or 'D' (draw) from our club's view |
 | created_at | TIMESTAMP | NOT NULL | Record creation time |
 
 **Indexes:**
@@ -252,10 +251,12 @@ Stores match records.
 - One-to-one with `match_statistics` table
 
 **Notes:**
-- Removed: `match_status`, `video_url`, `statsbomb_match_id` (not needed)
+- Data stored from club's perspective (not neutral home/away)
+- `our_score`, `opponent_score`, and `result` are NULL until match is completed
+- `result` is pre-calculated: 'W' if our_score > opponent_score, 'L' if our_score < opponent_score, 'D' if equal
 - `opponent_name` is denormalized for easier queries
-- Scores are NULL until match is completed
-- Created by coach uploading match video and StatsBomb data
+- Removed fields: `match_status`, `video_url`, `statsbomb_match_id`, `match_time`, `is_home_match`, `home_score`, `away_score`
+- Created by coach uploading match data via admin endpoint
 
 ---
 
@@ -288,7 +289,43 @@ Stores opponent team players for lineup display purposes.
 
 ---
 
-### 8. goals
+### 8. match_lineups
+
+Stores player lineups for each match (both our team and opponent).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| lineup_id | UUID | PRIMARY KEY | Unique lineup entry ID |
+| match_id | UUID | FOREIGN KEY → matches(match_id), NOT NULL | Match reference |
+| team_type | VARCHAR(20) | NOT NULL | 'our_team' or 'opponent_team' |
+| player_id | UUID | FOREIGN KEY → players(player_id), NULL | Our player (NULL for opponent) |
+| opponent_player_id | UUID | FOREIGN KEY → opponent_players(opponent_player_id), NULL | Opponent player (NULL for our team) |
+| player_name | VARCHAR(255) | NOT NULL | Player name (denormalized) |
+| jersey_number | INTEGER | NOT NULL | Jersey number |
+| position | VARCHAR(50) | NOT NULL | Player position |
+| created_at | TIMESTAMP | NOT NULL | Record creation time |
+
+**Indexes:**
+- `idx_match_lineups_match_id` on `match_id`
+- `idx_match_lineups_player_id` on `player_id`
+- `idx_match_lineups_opponent_player_id` on `opponent_player_id`
+
+**Relationships:**
+- Many-to-one with `matches` table
+- Many-to-one with `players` table (our team only)
+- Many-to-one with `opponent_players` table (opponent only)
+
+**Notes:**
+- Created from Starting XI events during match processing
+- Simplifies lineup queries - no complex event filtering needed
+- For our_team: player_id is set, opponent_player_id is NULL
+- For opponent_team: opponent_player_id is set, player_id is NULL
+- player_name, jersey_number, and position are denormalized for faster queries
+- Replaces complex event-based lineup queries
+
+---
+
+### 9. goals
 
 Stores goal events from matches.
 
@@ -296,14 +333,10 @@ Stores goal events from matches.
 |--------|------|-------------|-------------|
 | goal_id | UUID | PRIMARY KEY | Unique goal identifier |
 | match_id | UUID | FOREIGN KEY → matches(match_id), NOT NULL | Match reference |
-| team_name | VARCHAR(255) | NOT NULL | Team that scored |
 | scorer_name | VARCHAR(255) | NOT NULL | Player who scored |
-| assist_name | VARCHAR(255) | NULL | Player who assisted |
 | minute | INTEGER | NOT NULL | Match minute |
 | second | INTEGER | NULL | Second within minute |
-| period | INTEGER | NOT NULL | Match period (1, 2, etc.) |
-| goal_type | VARCHAR(50) | NULL | Type of goal (Open Play, Penalty, etc.) |
-| body_part | VARCHAR(50) | NULL | Body part used (Right Foot, Header, etc.) |
+| is_our_goal | BOOLEAN | NOT NULL | true if our club scored, false if opponent scored |
 | created_at | TIMESTAMP | NOT NULL | Record creation time |
 
 **Indexes:**
@@ -313,13 +346,13 @@ Stores goal events from matches.
 - Many-to-one with `matches` table
 
 **Notes:**
-- Extracted from StatsBomb events
-- `team_name` can be our club or opponent
-- Used for goals timeline display in match details
+- Extracted from StatsBomb Shot events with outcome "Goal"
+- `is_our_goal` used for UI color-coding (our goals vs opponent goals)
+- Simplified schema - only stores data needed for match summary display
 
 ---
 
-### 9. events
+### 10. events
 
 Stores raw StatsBomb event data.
 
@@ -391,7 +424,7 @@ WHERE event_data @> '{"type": {"name": "Shot"}}'::jsonb
 
 ---
 
-### 10. match_statistics
+### 11. match_statistics
 
 Stores aggregated statistics per match (for both teams).
 
@@ -435,7 +468,7 @@ Stores aggregated statistics per match (for both teams).
 
 ---
 
-### 11. player_match_statistics
+### 12. player_match_statistics
 
 Stores individual player statistics per match.
 
@@ -480,7 +513,7 @@ Stores individual player statistics per match.
 
 ---
 
-### 12. club_season_statistics
+### 13. club_season_statistics
 
 Aggregated season statistics for clubs.
 
@@ -494,7 +527,9 @@ Aggregated season statistics for clubs.
 | losses | INTEGER | DEFAULT 0 | Losses |
 | goals_scored | INTEGER | DEFAULT 0 | Total goals scored |
 | goals_conceded | INTEGER | DEFAULT 0 | Total goals conceded |
+| total_assists | INTEGER | DEFAULT 0 | Total assists by club |
 | total_clean_sheets | INTEGER | DEFAULT 0 | Clean sheets |
+| team_form | VARCHAR(5) | NULL | Last 5 match results (e.g., "WWDLW") |
 | avg_goals_per_match | DECIMAL(5,2) | NULL | Avg goals per match |
 | avg_possession_percentage | DECIMAL(5,2) | NULL | Avg possession % |
 | avg_total_shots | DECIMAL(5,2) | NULL | Avg shots per match |
@@ -527,11 +562,12 @@ Aggregated season statistics for clubs.
 - Recalculated after each new match
 - Aggregated from `match_statistics` table
 - Used for coach dashboard display
-- Team form calculated from recent match results (not stored, calculated on-the-fly)
+- `team_form` stores last 5 match results and is updated after each match (most recent result on left)
+- `total_assists` aggregated from goals table (assists per match)
 
 ---
 
-### 13. player_season_statistics
+### 14. player_season_statistics
 
 Aggregated season statistics for players.
 
@@ -577,7 +613,7 @@ Aggregated season statistics for players.
 
 ---
 
-### 14. training_plans
+### 15. training_plans
 
 Stores training plans assigned to players.
 
@@ -612,7 +648,7 @@ Stores training plans assigned to players.
 
 ---
 
-### 15. training_exercises
+### 16. training_exercises
 
 Stores individual exercises within training plans.
 

@@ -1,6 +1,6 @@
 # Spinta Backend - Project Progress Tracker
 
-**Last Updated:** 2025-11-11
+**Last Updated:** 2025-11-13
 **Approach:** Test-Driven Development (TDD)
 **Database:** PostgreSQL (Neon) for production, SQLite for testing
 
@@ -251,112 +251,205 @@ All specifications are in the `docs/` folder:
 
 ---
 
-### ❌ Phase 3: Admin Endpoint - Match Upload (NOT STARTED)
+### → Phase 2.5: Endpoint & Schema Validation (IN PROGRESS)
 
-**Why Phase 3 (moved from Phase 5):** After models exist, we need to POPULATE the database with match data before coach/player endpoints have anything to display. This is the most complex endpoint that creates all the data.
+**Status:** Validating all endpoints and schema before implementation
 
-**Total: 1 endpoint (most complex in the entire project)**
+**Goal:** For each endpoint, validate UI → API → Database in one pass, making corrections immediately.
 
-- [ ] `POST /api/coach/matches` - Upload match with StatsBomb events
+**Progress:** 0/18 endpoints validated
 
-**This endpoint must:**
-1. Parse ~3000 StatsBomb events from JSON
-2. Identify teams from Starting XI events (fuzzy match club name)
-3. Create/update opponent club
-4. Create match record
-5. Insert all ~3000 events to database (bulk insert for performance)
-6. Extract goals and find assists from events
-7. Create/update players (your club) with invite codes
-8. Create/update opponent players
-9. Calculate match statistics (both teams) from events
-10. Calculate player match statistics from events
-11. Update club season statistics (aggregated)
-12. Update player season statistics with attribute ratings
+#### Workflow (Repeat for Each Endpoint)
 
-**Estimated Files:**
-- Route: `app/api/routes/admin.py` or add to `coach.py`
-- Schemas: `app/schemas/match_upload.py`
-- Processing logic: `app/services/match_processor.py`
-- Statistics calculator: `app/services/statistics.py`
-- Invite code generator: `app/utils/invite_code.py`
-- Team matcher: `app/utils/team_matcher.py`
-- Tests: `tests/test_admin_match_upload.py` (integration test)
+**For Each Coach Endpoint (11 endpoints):**
 
-**Key Challenges:**
-- Transaction management (rollback entire upload on failure)
-- Bulk insert performance (~3000 events)
-- Fuzzy team name matching
-- Complex statistics aggregation from JSONB
-- Attribute rating calculation formulas
-- Goal validation vs final score
+1. **Review Against UI**
+   - Open corresponding UI page in `docs/Spinta UI.pdf`
+   - Check request/response fields match UI exactly
+   - Identify missing/extra fields
 
-**Dependencies:**
-- All match-related models
-- All statistics models
-- Comprehensive error handling
-- Sample StatsBomb event JSON for testing
+2. **Review Database Queries**
+   - Check if schema supports all required fields
+   - Verify JOINs work with current relationships
+   - Identify missing columns/tables
+   - Validate query logic correctness
+
+3. **Document Changes**
+   - Update endpoint in `docs/05_COACH_ENDPOINTS.md`:
+     - Fix request/response schemas
+     - Fix database queries
+     - Add missing fields
+     - Remove unnecessary fields
+   - Update `docs/02_DATABASE_SCHEMA.md`:
+     - Add missing columns
+     - Modify field types
+     - Add/update relationships
+     - Update constraints
+
+4. **Move to Next Endpoint**
+
+#### Coach Endpoints Order:
+1. [x] GET /api/coach/dashboard (Pages 6-7)
+2. [x] GET /api/coach/matches/{match_id} (Pages 8-10)
+3. [ ] GET /api/coach/players (Page 11)
+4. [ ] GET /api/coach/players/{player_id} (Pages 12-16)
+5. [ ] GET /api/coach/players/{player_id}/matches/{match_id} (Page 15)
+6. [ ] GET /api/coach/profile (Page 20)
+7. [ ] POST /api/coach/training-plans/generate-ai (Pages 16-17)
+8. [ ] POST /api/coach/training-plans (Page 17)
+9. [ ] GET /api/coach/training-plans/{plan_id} (Page 18)
+10. [ ] PUT /api/coach/training-plans/{plan_id}
+11. [ ] DELETE /api/coach/training-plans/{plan_id}
+
+#### Then Repeat for Player Endpoints (7 endpoints):
+1. [ ] GET /api/player/dashboard (Page 25)
+2. [ ] GET /api/player/matches (Page 26)
+3. [ ] GET /api/player/matches/{match_id} (Page 27)
+4. [ ] GET /api/player/training (Page 28)
+5. [ ] GET /api/player/training/{plan_id} (Page 29)
+6. [ ] PUT /api/player/training/exercises/{exercise_id}/toggle (Page 29)
+7. [ ] GET /api/player/profile (Page 30)
+
+#### Final Step: Apply Schema Changes to Models
+
+After all endpoints validated:
+- Review all changes in `docs/02_DATABASE_SCHEMA.md`
+- Update model files in `app/models/` accordingly
+- Generate Alembic migrations
+- Apply migrations
+- Update tests if needed
+
+**Benefits of Endpoint-by-Endpoint Approach:**
+1. **Immediate Fixes:** Changes applied right away, not held in memory
+2. **Clear Progress:** Can track exactly which endpoints are validated
+3. **No Context Loss:** Complete one endpoint before moving to next
+4. **Easier Review:** Changes grouped by endpoint, not by type
+5. **Flexible:** Can pause/resume at any endpoint boundary
 
 ---
 
-### ❌ Phase 4: Coach Endpoints (NOT STARTED)
+### ❌ Phase 3: Admin Endpoint Processing Logic (NOT STARTED)
 
-**Why Phase 4 (moved from Phase 3):** After admin endpoint populates the database, coach endpoints can now display that data.
+**Goal:** Build data processing incrementally from raw JSON to database tables.
+
+#### Step 1: Granular Processing Logic Design
+
+For each table in the final schema, document exact processing steps:
+
+**Create file:** `docs/PROCESSING_LOGIC.md`
+
+For each table, answer:
+- Which raw JSON events contain this data?
+- What filters/conditions extract the right events?
+- How to calculate/derive each field?
+- What validation rules apply?
+
+**Example:**
+```markdown
+### Table: goals
+#### Column: scorer_name
+- Source: Shot events where outcome.name == "Goal"
+- Extract: event['player']['name']
+- Validation: Must exist in lineup
+```
+
+#### Step 2: Implement Processing Functions
+
+Create modular processing functions:
+
+```
+app/services/
+├── match_processor.py       # Main orchestrator
+├── team_identifier.py       # Team matching logic
+├── player_extractor.py      # Player creation logic
+├── goal_extractor.py        # Goal extraction logic
+├── statistics_calculator.py # Stats calculation
+└── event_processor.py       # Event storage
+```
+
+#### Step 3: Consolidate into Main Processor
+
+Create `app/services/match_processor.py` that:
+- Orchestrates all extraction functions
+- Handles transaction management
+- Returns processing summary
+
+#### Step 4: Integrate with Admin Endpoint
+
+Create POST /api/coach/matches route that:
+- Validates request
+- Calls match processor
+- Returns response
+
+#### Step 5: Test with Real Data
+
+- Test with `docs/15946.json`
+- Verify all tables populated correctly
+- Validate calculations
+
+**Key Deliverables:**
+- `docs/PROCESSING_LOGIC.md` - Detailed processing documentation
+- `app/services/` - All processing functions
+- `app/api/routes/admin.py` - Admin endpoint implementation
+- `tests/test_admin_match_upload.py` - Integration tests
+
+---
+
+### ❌ Phase 4: Implement Coach Endpoints (NOT STARTED)
 
 **Total: 11 endpoints**
 
-#### 4.1 Dashboard & Matches
-- [ ] `GET /api/coach/dashboard` - Dashboard with summary + statistics tabs
-- [ ] `GET /api/coach/matches/{match_id}` - Match detail with 3 tabs (summary, stats, lineup)
+For each endpoint:
+- Create route handler
+- Create schemas
+- Create CRUD operations
+- Write tests
 
-#### 4.2 Players Management
-- [ ] `GET /api/coach/players` - List all players (joined + pending)
-- [ ] `GET /api/coach/players/{player_id}` - Player detail with 3 tabs
-- [ ] `GET /api/coach/players/{player_id}/matches/{match_id}` - Player match detail
+**Endpoints to Implement:**
+1. [ ] GET /api/coach/dashboard
+2. [ ] GET /api/coach/matches/{match_id}
+3. [ ] GET /api/coach/players
+4. [ ] GET /api/coach/players/{player_id}
+5. [ ] GET /api/coach/players/{player_id}/matches/{match_id}
+6. [ ] GET /api/coach/profile
+7. [ ] POST /api/coach/training-plans/generate-ai
+8. [ ] POST /api/coach/training-plans
+9. [ ] GET /api/coach/training-plans/{plan_id}
+10. [ ] PUT /api/coach/training-plans/{plan_id}
+11. [ ] DELETE /api/coach/training-plans/{plan_id}
 
-#### 4.3 Profile
-- [ ] `GET /api/coach/profile` - Coach profile with club stats
-
-#### 4.4 Training Plans
-- [ ] `POST /api/coach/training-plans/generate-ai` - AI training plan generation
-- [ ] `POST /api/coach/training-plans` - Create training plan
-- [ ] `GET /api/coach/training-plans/{plan_id}` - Training plan detail
-- [ ] `PUT /api/coach/training-plans/{plan_id}` - Update training plan
-- [ ] `DELETE /api/coach/training-plans/{plan_id}` - Delete training plan
-
-**Estimated Files Per Endpoint:**
-- Route file: `app/api/routes/coach.py`
-- Schemas: `app/schemas/coach_*.py`
-- CRUD operations: `app/crud/match.py`, `app/crud/statistics.py`, etc.
-- Tests: `tests/test_coach_*.py`
+**Files to Create:**
+- `app/api/routes/coach.py` - Route handlers
+- `app/schemas/coach_*.py` - Request/response schemas
+- `app/crud/match.py`, `statistics.py`, `training.py` - CRUD operations
+- `tests/test_coach_*.py` - Endpoint tests
 
 ---
 
-### ❌ Phase 5: Player Endpoints (NOT STARTED)
-
-**Why Phase 5 (moved from Phase 4):** Player endpoints are similar to coach endpoints but filtered to player's own data.
+### ❌ Phase 5: Implement Player Endpoints (NOT STARTED)
 
 **Total: 7 endpoints**
 
-#### 5.1 Dashboard & Stats
-- [ ] `GET /api/player/dashboard` - My Stats tab (attributes + season stats)
+For each endpoint:
+- Create route handler
+- Create schemas
+- Reuse CRUD where possible
+- Write tests
 
-#### 5.2 Matches
-- [ ] `GET /api/player/matches` - Matches list
-- [ ] `GET /api/player/matches/{match_id}` - Player match detail
+**Endpoints to Implement:**
+1. [ ] GET /api/player/dashboard
+2. [ ] GET /api/player/matches
+3. [ ] GET /api/player/matches/{match_id}
+4. [ ] GET /api/player/training
+5. [ ] GET /api/player/training/{plan_id}
+6. [ ] PUT /api/player/training/exercises/{exercise_id}/toggle
+7. [ ] GET /api/player/profile
 
-#### 5.3 Training
-- [ ] `GET /api/player/training` - Training plans list
-- [ ] `GET /api/player/training/{plan_id}` - Training plan detail
-- [ ] `PUT /api/player/training/exercises/{exercise_id}/toggle` - Toggle exercise completion
-
-#### 5.4 Profile
-- [ ] `GET /api/player/profile` - Player profile
-
-**Estimated Files Per Endpoint:**
-- Route file: `app/api/routes/player.py`
-- Schemas: `app/schemas/player_*.py`
-- CRUD operations: Reuse from coach endpoints where applicable
-- Tests: `tests/test_player_*.py`
+**Files to Create:**
+- `app/api/routes/player.py` - Route handlers
+- `app/schemas/player_*.py` - Request/response schemas
+- Reuse CRUD from coach endpoints
+- `tests/test_player_*.py` - Endpoint tests
 
 ---
 
@@ -398,17 +491,17 @@ Spinta_Backend/
 │   │   ├── coach.py ✅
 │   │   ├── club.py ✅
 │   │   ├── player.py ✅
-│   │   ├── opponent_club.py ❌
-│   │   ├── opponent_player.py ❌
-│   │   ├── match.py ❌
-│   │   ├── goal.py ❌
-│   │   ├── event.py ❌
-│   │   ├── match_statistics.py ❌
-│   │   ├── player_match_statistics.py ❌
-│   │   ├── club_season_statistics.py ❌
-│   │   ├── player_season_statistics.py ❌
-│   │   ├── training_plan.py ❌
-│   │   └── training_exercise.py ❌
+│   │   ├── opponent_club.py ✅
+│   │   ├── opponent_player.py ✅
+│   │   ├── match.py ✅
+│   │   ├── goal.py ✅
+│   │   ├── event.py ✅
+│   │   ├── match_statistics.py ✅
+│   │   ├── player_match_statistics.py ✅
+│   │   ├── club_season_statistics.py ✅
+│   │   ├── player_season_statistics.py ✅
+│   │   ├── training_plan.py ✅
+│   │   └── training_exercise.py ✅
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── auth.py ✅
@@ -451,42 +544,37 @@ Spinta_Backend/
 
 ## Next Steps
 
-### Immediate: Phase 2 - Database Models
+### Immediate: Phase 2.5 - Endpoint & Schema Validation
 
-**Logical Implementation Order:**
+**Current Task:** Validate first coach endpoint (Dashboard - Pages 6-7)
 
-1. **Match-Related Models** (highest priority - required for Phase 3)
-   - Start with: opponent_clubs, matches, opponent_players
-   - Then: goals, events (with JSONB for event_data)
-   - These are required for the admin endpoint
+**Workflow for Each Endpoint:**
 
-2. **Statistics Models** (required for Phase 3)
-   - Start with: match_statistics, player_match_statistics
-   - Then: club_season_statistics, player_season_statistics
-   - These store calculated data from events table
-
-3. **Training Models** (required for Phases 4-5)
-   - Start with: training_plans, training_exercises
-   - These are independent and can be done last
-
-### After Phase 2: Phase 3 - Admin Endpoint
+1. **Review UI** - Check pages in `docs/Spinta UI.pdf`
+2. **Compare API** - Verify request/response in endpoint docs
+3. **Validate Queries** - Check database can support all fields
+4. **Document Changes** - Update endpoint docs and schema docs immediately
 
 **Why this order makes sense:**
-- ✅ Phase 2 creates the database schema (all 15 tables)
-- ✅ Phase 3 (admin endpoint) POPULATES the database with match data
-- ✅ Phase 4 (coach endpoints) reads and displays the populated data
-- ✅ Phase 5 (player endpoints) reads and displays player-specific data
+- ✅ Phase 1 (Foundation): Auth and core infrastructure complete
+- ✅ Phase 2 (Models): All 15 database models created
+- → Phase 2.5 (Validation): Ensure schema matches UI/API requirements
+- → Phase 3 (Admin Processing): Build data processing systematically
+- → Phase 4-5 (Implementation): Implement validated endpoints with confidence
 
-Without Phase 3 working first, Phases 4-5 would query empty tables, making testing difficult.
+Validating everything first prevents rework later and ensures the schema supports all UI requirements.
 
-### Approach for Each Model
+### Approach for Phase 2.5
 
-Using TDD:
-1. Create model file in `app/models/`
-2. Write tests in `tests/test_models.py`
-3. Generate Alembic migration
-4. Run tests (should pass)
-5. Verify migration works on both PostgreSQL and SQLite
+For each endpoint:
+1. Open corresponding UI page
+2. List all fields shown in UI
+3. Compare against endpoint spec
+4. Test if database queries work
+5. Update docs immediately
+6. Move to next endpoint
+
+Track progress: Currently 0/18 endpoints validated
 
 ---
 
@@ -580,23 +668,25 @@ httpx
 ## Summary
 
 **Completed:** 4/23 endpoints (17%)
-**Models Completed:** 4/15 tables (27%)
+**Models Completed:** 15/15 tables (100%) - Pending revisions from Phase 2.5
 
 ### Phase Status
 - **Phase 1 (Foundation):** ✅ COMPLETE
-- **Phase 2 (Database Models):** ❌ NOT STARTED - 11 models remaining
-- **Phase 3 (Admin Endpoint):** ❌ NOT STARTED - 1 complex endpoint to populate DB
-- **Phase 4 (Coach Endpoints):** ❌ NOT STARTED - 11 endpoints to display data
-- **Phase 5 (Player Endpoints):** ❌ NOT STARTED - 7 endpoints to display data
+- **Phase 2 (Database Models):** ✅ COMPLETE - All 15 models created (pending revisions)
+- **Phase 2.5 (Endpoint & Schema Validation):** → IN PROGRESS - 0/18 endpoints validated
+- **Phase 3 (Admin Endpoint Processing):** ❌ NOT STARTED - Data processing logic & implementation
+- **Phase 4 (Coach Endpoints):** ❌ NOT STARTED - 11 endpoints to implement
+- **Phase 5 (Player Endpoints):** ❌ NOT STARTED - 7 endpoints to implement
 
-**Current State:** Foundation complete. Ready to build remaining database models using TDD approach.
+**Current State:** All database models created. Now validating endpoints against UI and schema before implementation.
 
 **Implementation Order:**
 1. ✅ Phase 1: Foundation (auth, core models)
-2. → Phase 2: All database models (schema)
-3. → Phase 3: Admin endpoint (populate database)
-4. → Phase 4: Coach endpoints (read/display data)
-5. → Phase 5: Player endpoints (read/display data)
+2. ✅ Phase 2: All database models (schema)
+3. → Phase 2.5: Validate endpoints & schema (current)
+4. → Phase 3: Admin data processing (systematic build)
+5. → Phase 4: Implement coach endpoints
+6. → Phase 5: Implement player endpoints
 
 ---
 

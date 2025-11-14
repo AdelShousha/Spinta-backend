@@ -67,20 +67,16 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         "match_id": "match-uuid-1",
         "opponent_name": "City Strikers",
         "match_date": "2025-10-08",
-        "match_time": "15:30",
-        "home_score": 3,
-        "away_score": 2,
-        "is_home_match": true,
+        "our_score": 3,
+        "opponent_score": 2,
         "result": "W"
       },
       {
         "match_id": "match-uuid-2",
         "opponent_name": "North Athletic",
         "match_date": "2025-10-01",
-        "match_time": "14:00",
-        "home_score": 1,
-        "away_score": 1,
-        "is_home_match": false,
+        "our_score": 1,
+        "opponent_score": 1,
         "result": "D"
       }
     ]
@@ -131,66 +127,66 @@ SELECT
   c.club_name,
   c.logo_url
 FROM users u
-JOIN coaches co ON u.user_id = co.coach_id
+JOIN coaches co ON u.user_id = co.user_id
 JOIN clubs c ON co.coach_id = c.coach_id
 WHERE u.user_id = :user_id_from_jwt;
 
--- 2. Get season record from club_season_statistics
+-- 2. Get all club statistics (season_record, team_form, and statistics)
 SELECT
+  -- For Season Record
   wins,
   draws,
-  losses
+  losses,
+
+  -- For Team Form
+  team_form,
+
+  -- For Statistics.season_summary
+  matches_played,
+  goals_scored,
+  goals_conceded,
+  total_assists,
+
+  -- For Statistics.attacking
+  avg_goals_per_match,
+  avg_xg_per_match,
+  avg_total_shots,
+  avg_shots_on_target,
+  avg_dribbles,
+  avg_successful_dribbles,
+
+  -- For Statistics.passes
+  avg_possession_percentage,
+  avg_total_passes,
+  pass_completion_rate,
+  avg_final_third_passes,
+  avg_crosses,
+
+  -- For Statistics.defending
+  total_clean_sheets,
+  avg_goals_conceded_per_match,
+  avg_tackles,
+  tackle_success_rate,
+  avg_interceptions,
+  interception_success_rate,
+  avg_ball_recoveries,
+  avg_saves_per_match
 FROM club_season_statistics
 WHERE club_id = :club_id;
 
--- 3. Calculate team form (last 5 results as "WWDLW")
-SELECT
-  STRING_AGG(
-    CASE
-      WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
-      WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
-      WHEN m.is_home_match AND m.home_score = m.away_score THEN 'D'
-      WHEN NOT m.is_home_match AND m.away_score > m.home_score THEN 'W'
-      WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
-      ELSE 'D'
-    END,
-    ''
-    ORDER BY m.match_date DESC, m.match_time DESC
-  ) as team_form
-FROM (
-  SELECT * FROM matches
-  WHERE club_id = :club_id
-    AND home_score IS NOT NULL
-  ORDER BY match_date DESC, match_time DESC
-  LIMIT 5
-) m;
-
--- 4. Get ALL matches with pagination
+-- 3. Get matches with pagination
 SELECT
   m.match_id,
   m.opponent_name,
   m.match_date,
-  m.match_time,
-  m.home_score,
-  m.away_score,
-  m.is_home_match,
-  CASE
-    WHEN m.home_score IS NULL THEN NULL
-    WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
-    WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
-    WHEN m.is_home_match AND m.home_score = m.away_score THEN 'D'
-    WHEN NOT m.is_home_match AND m.away_score > m.home_score THEN 'W'
-    WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
-    ELSE 'D'
-  END as result,
+  m.our_score,
+  m.opponent_score,
+  m.result,
   COUNT(*) OVER() as total_count
 FROM matches m
 WHERE m.club_id = :club_id
-ORDER BY m.match_date DESC, m.match_time DESC
+ORDER BY m.match_date DESC
 LIMIT :matches_limit OFFSET :matches_offset;
-
--- 5. Get detailed statistics from club_season_statistics
--- (All the avg fields are already pre-calculated in the table)
 ```
 
 **Error Responses:**
@@ -244,10 +240,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
   "match": {
     "match_id": "550e8400-e29b-41d4-a716-446655440000",
     "match_date": "2025-10-08",
-    "match_time": "15:30",
-    "home_score": 3,
-    "away_score": 2,
-    "is_home_match": true,
+    "our_score": 3,
+    "opponent_score": 2,
     "result": "W"
   },
   "teams": {
@@ -265,57 +259,37 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       {
         "goal_id": "goal-uuid-1",
         "scorer_name": "Marcus Silva",
-        "assist_name": "Jake Thompson",
-        "team_name": "Thunder United FC",
         "minute": 23,
         "second": 0,
-        "period": 1,
-        "goal_type": "Open Play",
-        "body_part": "Right Foot"
+        "is_our_goal": true
       },
       {
         "goal_id": "goal-uuid-2",
         "scorer_name": "D. Martinez",
-        "assist_name": null,
-        "team_name": "City Strikers",
         "minute": 34,
         "second": 0,
-        "period": 1,
-        "goal_type": "Penalty",
-        "body_part": "Right Foot"
+        "is_our_goal": false
       },
       {
         "goal_id": "goal-uuid-3",
         "scorer_name": "Jake Thompson",
-        "assist_name": "Marcus Silva",
-        "team_name": "Thunder United FC",
         "minute": 45,
         "second": 0,
-        "period": 1,
-        "goal_type": "Open Play",
-        "body_part": "Head"
+        "is_our_goal": true
       },
       {
         "goal_id": "goal-uuid-4",
         "scorer_name": "R. Johnson",
-        "assist_name": "P. Thompson",
-        "team_name": "City Strikers",
         "minute": 67,
         "second": 0,
-        "period": 2,
-        "goal_type": "Open Play",
-        "body_part": "Left Foot"
+        "is_our_goal": false
       },
       {
         "goal_id": "goal-uuid-5",
         "scorer_name": "Marcus Silva",
-        "assist_name": "David Chen",
-        "team_name": "Thunder United FC",
         "minute": 78,
         "second": 0,
-        "period": 2,
-        "goal_type": "Open Play",
-        "body_part": "Right Foot"
+        "is_our_goal": true
       }
     ]
   },
@@ -557,46 +531,33 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 **Database Queries:**
 
 ```sql
--- 1. Match info with teams
+-- 1. Match info and team details
 SELECT
   m.match_id,
   m.match_date,
-  m.match_time,
-  m.home_score,
-  m.away_score,
-  m.is_home_match,
+  m.our_score,
+  m.opponent_score,
+  m.result,
   c.club_name as our_club_name,
   c.logo_url as our_logo_url,
   m.opponent_name,
-  oc.logo_url as opponent_logo_url,
-  CASE
-    WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
-    WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
-    WHEN m.is_home_match AND m.home_score = m.away_score THEN 'D'
-    WHEN NOT m.is_home_match AND m.away_score > m.home_score THEN 'W'
-    WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
-    ELSE 'D'
-  END as result
+  oc.logo_url as opponent_logo_url
 FROM matches m
 LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
 JOIN clubs c ON m.club_id = c.club_id
 WHERE m.match_id = :match_id
-  AND m.club_id = :club_id_from_jwt;
+  AND m.club_id = :club_id_from_jwt; -- Found via JWT -> coach -> club
 
 -- 2. Goal scorers
 SELECT
   goal_id,
-  team_name,
   scorer_name,
-  assist_name,
   minute,
   second,
-  period,
-  goal_type,
-  body_part
+  is_our_goal
 FROM goals
 WHERE match_id = :match_id
-ORDER BY period, minute, second;
+ORDER BY minute, second;
 
 -- 3. Match statistics for both teams
 SELECT
@@ -621,31 +582,20 @@ SELECT
 FROM match_statistics
 WHERE match_id = :match_id;
 
--- 4. Our team lineup (from players who participated)
-SELECT DISTINCT
-  p.player_id,
-  p.player_name,
-  p.jersey_number,
-  p.position
-FROM events e
-JOIN players p ON e.statsbomb_player_id = p.statsbomb_player_id
-WHERE e.match_id = :match_id
-  AND e.team_name = :our_club_name
-  AND e.event_type_name = 'Starting XI'
-  AND p.club_id = :club_id
-ORDER BY p.jersey_number;
-
--- 5. Opponent lineup (from opponent_players table)
+-- 4. Get lineups for both teams
 SELECT
-  op.opponent_player_id,
-  op.player_name,
-  op.jersey_number,
-  op.position
-FROM opponent_players op
-JOIN matches m ON m.opponent_club_id = op.opponent_club_id
-WHERE m.match_id = :match_id
-ORDER BY op.jersey_number;
+  team_type,
+  player_id,
+  opponent_player_id,
+  player_name,
+  jersey_number,
+  position
+FROM match_lineups
+WHERE match_id = :match_id
+ORDER BY team_type, jersey_number;
 ```
+
+**Note:** Lineups are populated from Starting XI events during match processing. Backend splits results by `team_type` to populate `our_team` and `opponent_team` arrays.
 
 **Error Responses:**
 
@@ -771,6 +721,8 @@ ORDER BY jersey_number;
 **UI Purpose:** Display full player profile with 3 tabs: Summary (attributes + season stats), Matches (match history), and Training (training plans).
 
 **UI Reference:** Pages 12-16 in Spinta UI.pdf
+
+**TODO:** Update this endpoint for new matches schema (`our_score`/`opponent_score`/`result` instead of `home_score`/`away_score`/`is_home_match`, no `match_time` field). Will be updated when we validate this endpoint.
 
 ### GET /api/coach/players/{player_id}
 
@@ -1094,6 +1046,8 @@ Forbidden (403):
 **UI Purpose:** Display player's individual performance in a specific match - simple page showing match header, player summary (goals/assists), and statistics sections.
 
 **UI Reference:** Page 15 in Spinta UI.pdf
+
+**TODO:** Update this endpoint for new matches schema (`our_score`/`opponent_score`/`result` instead of `home_score`/`away_score`/`is_home_match`, no `match_time` field). Will be updated when we validate this endpoint.
 
 ### GET /api/coach/players/{player_id}/matches/{match_id}
 

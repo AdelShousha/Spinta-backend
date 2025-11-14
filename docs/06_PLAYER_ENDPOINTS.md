@@ -183,6 +183,8 @@ Forbidden (403):
 
 **UI Purpose:** Display all matches the player participated in with their personal stats.
 
+**TODO:** Update this endpoint for new matches schema (`our_score`/`opponent_score`/`result` instead of `home_score`/`away_score`/`is_home_match`, no `match_time` field). Will be updated when we validate this endpoint.
+
 ### GET /api/player/matches
 
 **Description:** Returns paginated list of all matches with player's statistics for each match.
@@ -266,6 +268,8 @@ LIMIT :limit OFFSET :offset;
 **UI Reference:** Page 27 in Spinta UI.pdf
 
 **UI Purpose:** Display player's individual performance in a specific match - simple page showing match header, player summary (goals/assists), and statistics sections. This is identical to the coach's view of player match detail (Page 15).
+
+**TODO:** Update this endpoint for new matches schema (`our_score`/`opponent_score`/`result` instead of `home_score`/`away_score`/`is_home_match`, no `match_time` field). Will be updated when we validate this endpoint.
 
 ### GET /api/player/matches/{match_id}
 
