@@ -11,6 +11,7 @@
 **Spinta** is a youth soccer analytics platform backend API that serves both coaches and players through a mobile application. The system processes StatsBomb match data, manages teams and players, calculates performance statistics, and provides training plan management.
 
 ### Key Technologies
+
 - **Framework:** FastAPI
 - **Database:** SQLAlchemy ORM with Alembic migrations
 - **Authentication:** JWT tokens (no expiration)
@@ -19,6 +20,7 @@
 - **Test DB:** SQLite (in-memory)
 
 ### Architecture Patterns
+
 - Screen-based API design (one endpoint per UI screen)
 - Invite code-based player signup flow
 - Automatic statistics calculation from StatsBomb events
@@ -45,6 +47,7 @@ All specifications are in the `docs/` folder:
 ## Database Schema (15 Tables)
 
 ### Core Tables (6 tables)
+
 1. ✅ **users** - User accounts (coaches and players)
 2. ✅ **coaches** - Coach-specific data
 3. ✅ **clubs** - Club/team information
@@ -53,17 +56,20 @@ All specifications are in the `docs/` folder:
 6. ✅ **opponent_players** - Opponent players (for lineups)
 
 ### Match Data Tables (3 tables)
+
 7. ✅ **matches** - Match records
 8. ✅ **goals** - Goal events
 9. ✅ **events** - StatsBomb event data (~3000 per match)
 
 ### Statistics Tables (4 tables)
+
 10. ✅ **match_statistics** - Team stats per match
 11. ✅ **player_match_statistics** - Player stats per match
 12. ✅ **club_season_statistics** - Aggregated club season stats
 13. ✅ **player_season_statistics** - Aggregated player season stats + attributes
 
 ### Training Tables (2 tables)
+
 14. ✅ **training_plans** - Training plans assigned to players
 15. ✅ **training_exercises** - Individual exercises within plans
 
@@ -76,6 +82,7 @@ All specifications are in the `docs/` folder:
 **Status:** All basic infrastructure completed successfully
 
 #### 1.1 Project Setup ✅
+
 - [x] FastAPI application structure
 - [x] Configuration management (Pydantic Settings)
 - [x] Database connection (SQLAlchemy + Neon)
@@ -85,6 +92,7 @@ All specifications are in the `docs/` folder:
 - [x] .gitignore setup
 
 **Files Created:**
+
 - `app/main.py` - FastAPI app entry point
 - `app/config.py` - Environment configuration
 - `app/database.py` - Database connection and session management
@@ -95,6 +103,7 @@ All specifications are in the `docs/` folder:
 - `GETTING_STARTED.md` - Setup documentation
 
 **Key Solutions Implemented:**
+
 - Fixed circular imports by separating `database.py`
 - Resolved CORS origins parsing with `@property` decorator
 - Fixed pytest.ini comment parsing issues
@@ -102,6 +111,7 @@ All specifications are in the `docs/` folder:
 ---
 
 #### 1.2 Database Models (Core Tables) ✅
+
 - [x] Base model with GUID type (PostgreSQL UUID / SQLite String compatibility)
 - [x] TimestampMixin for created_at/updated_at
 - [x] User model (polymorphic: coach/player)
@@ -112,6 +122,7 @@ All specifications are in the `docs/` folder:
 - [x] Model tests (test_models.py)
 
 **Files Created:**
+
 - `app/models/base.py` - Base class with GUID and TimestampMixin
 - `app/models/user.py` - User model
 - `app/models/coach.py` - Coach model
@@ -122,6 +133,7 @@ All specifications are in the `docs/` folder:
 - `tests/test_models.py` - Model tests
 
 **Key Features:**
+
 - GUID type adapter for PostgreSQL/SQLite compatibility using `load_dialect_impl`
 - Proper foreign key relationships with CASCADE rules
 - Player model supports both incomplete (pre-signup) and complete (linked) states
@@ -130,6 +142,7 @@ All specifications are in the `docs/` folder:
 ---
 
 #### 1.3 Authentication System ✅
+
 - [x] Password hashing (bcrypt)
 - [x] JWT token generation and validation
 - [x] Auth dependency (`get_current_user`)
@@ -143,6 +156,7 @@ All specifications are in the `docs/` folder:
 - [x] Complete test suite for all auth endpoints
 
 **Files Created:**
+
 - `app/core/security.py` - Password hashing, JWT generation/validation
 - `app/core/deps.py` - Authentication dependencies
 - `app/api/routes/auth.py` - All 4 auth endpoints
@@ -158,12 +172,14 @@ All specifications are in the `docs/` folder:
 - `tests/test_auth.py` - Complete auth test suite
 
 **Endpoints Implemented:**
+
 1. `POST /api/auth/register/coach` - Coach registration with club creation
 2. `POST /api/auth/verify-invite` - Validate player invite code
 3. `POST /api/auth/register/player` - Complete player signup
 4. `POST /api/auth/login` - User login (coach or player)
 
 **Key Features:**
+
 - JWT tokens without expiration (as per spec)
 - Invite code generation with cryptographic randomness
 - Transaction-safe registration (rollback on failure)
@@ -179,6 +195,7 @@ All specifications are in the `docs/` folder:
 **Why Phase 2:** Must create all database models before we can populate or query the database.
 
 #### 2.1 Match-Related Models ✅
+
 - [x] Opponent clubs model
 - [x] Opponent players model
 - [x] Matches model
@@ -188,6 +205,7 @@ All specifications are in the `docs/` folder:
 - [x] Model tests (compact grouped tests)
 
 **Files Created:**
+
 - `app/models/opponent_club.py` - Opponent team information
 - `app/models/opponent_player.py` - Opponent player details
 - `app/models/match.py` - Match records with FK relationships
@@ -199,6 +217,7 @@ All specifications are in the `docs/` folder:
 - Updated `tests/test_models.py` with `TestMatchRelatedModels` class
 
 **Key Features Implemented:**
+
 - JSONB storage with SQLite fallback (JSONBType adapter)
 - CASCADE delete relationships (Club→Match→Goals/Events)
 - GIN index on event_data for efficient JSONB queries
@@ -207,6 +226,7 @@ All specifications are in the `docs/` folder:
 ---
 
 #### 2.2 Statistics Models ✅
+
 - [x] Match statistics model (2 records per match: our_team + opponent_team)
 - [x] Player match statistics model (N records per match, one per player)
 - [x] Club season statistics model (aggregated from match_statistics)
@@ -215,6 +235,7 @@ All specifications are in the `docs/` folder:
 - [x] Model tests (compact grouped tests)
 
 **Files Created:**
+
 - `app/models/match_statistics.py` - Team stats per match
 - `app/models/player_match_statistics.py` - Player stats per match
 - `app/models/club_season_statistics.py` - Season aggregated club stats
@@ -223,6 +244,7 @@ All specifications are in the `docs/` folder:
 - Updated `tests/test_models.py` with `TestStatisticsModels` class
 
 **Key Features Implemented:**
+
 - Numeric precision for statistics (DECIMAL 5,2 and 8,6 for xG)
 - UNIQUE constraints for one-to-one relationships
 - CASCADE delete on player/match deletion
@@ -231,18 +253,21 @@ All specifications are in the `docs/` folder:
 ---
 
 #### 2.3 Training Models ✅
+
 - [x] Training plans model
 - [x] Training exercises model
 - [x] Alembic migration (grouped)
 - [x] Model tests (compact grouped tests)
 
 **Files Created:**
+
 - `app/models/training_plan.py` - Training plans for players
 - `app/models/training_exercise.py` - Exercises within plans
 - `alembic/versions/2c84469970f0_add_training_models.py` - Migration
 - Updated `tests/test_models.py` with `TestTrainingModels` class
 
 **Key Features Implemented:**
+
 - Status tracking (pending, in_progress, completed)
 - Completion tracking per exercise
 - SET NULL on coach deletion (preserve plans)
@@ -264,17 +289,20 @@ All specifications are in the `docs/` folder:
 **For Each Coach Endpoint (11 endpoints):**
 
 1. **Review Against UI**
+
    - Open corresponding UI page in `docs/Spinta UI.pdf`
    - Check request/response fields match UI exactly
    - Identify missing/extra fields
 
 2. **Review Database Queries**
+
    - Check if schema supports all required fields
    - Verify JOINs work with current relationships
    - Identify missing columns/tables
    - Validate query logic correctness
 
 3. **Document Changes**
+
    - Update endpoint in `docs/05_COACH_ENDPOINTS.md`:
      - Fix request/response schemas
      - Fix database queries
@@ -289,9 +317,10 @@ All specifications are in the `docs/` folder:
 4. **Move to Next Endpoint**
 
 #### Coach Endpoints Order:
+
 1. [x] GET /api/coach/dashboard (Pages 6-7)
 2. [x] GET /api/coach/matches/{match_id} (Pages 8-10)
-3. [ ] GET /api/coach/players (Page 11)
+3. [x] GET /api/coach/players (Page 11)
 4. [ ] GET /api/coach/players/{player_id} (Pages 12-16)
 5. [ ] GET /api/coach/players/{player_id}/matches/{match_id} (Page 15)
 6. [ ] GET /api/coach/profile (Page 20)
@@ -302,6 +331,7 @@ All specifications are in the `docs/` folder:
 11. [ ] DELETE /api/coach/training-plans/{plan_id}
 
 #### Then Repeat for Player Endpoints (7 endpoints):
+
 1. [ ] GET /api/player/dashboard (Page 25)
 2. [ ] GET /api/player/matches (Page 26)
 3. [ ] GET /api/player/matches/{match_id} (Page 27)
@@ -313,6 +343,7 @@ All specifications are in the `docs/` folder:
 #### Final Step: Apply Schema Changes to Models
 
 After all endpoints validated:
+
 - Review all changes in `docs/02_DATABASE_SCHEMA.md`
 - Update model files in `app/models/` accordingly
 - Generate Alembic migrations
@@ -320,6 +351,7 @@ After all endpoints validated:
 - Update tests if needed
 
 **Benefits of Endpoint-by-Endpoint Approach:**
+
 1. **Immediate Fixes:** Changes applied right away, not held in memory
 2. **Clear Progress:** Can track exactly which endpoints are validated
 3. **No Context Loss:** Complete one endpoint before moving to next
@@ -339,15 +371,19 @@ For each table in the final schema, document exact processing steps:
 **Create file:** `docs/PROCESSING_LOGIC.md`
 
 For each table, answer:
+
 - Which raw JSON events contain this data?
 - What filters/conditions extract the right events?
 - How to calculate/derive each field?
 - What validation rules apply?
 
 **Example:**
+
 ```markdown
 ### Table: goals
+
 #### Column: scorer_name
+
 - Source: Shot events where outcome.name == "Goal"
 - Extract: event['player']['name']
 - Validation: Must exist in lineup
@@ -370,6 +406,7 @@ app/services/
 #### Step 3: Consolidate into Main Processor
 
 Create `app/services/match_processor.py` that:
+
 - Orchestrates all extraction functions
 - Handles transaction management
 - Returns processing summary
@@ -377,6 +414,7 @@ Create `app/services/match_processor.py` that:
 #### Step 4: Integrate with Admin Endpoint
 
 Create POST /api/coach/matches route that:
+
 - Validates request
 - Calls match processor
 - Returns response
@@ -388,6 +426,7 @@ Create POST /api/coach/matches route that:
 - Validate calculations
 
 **Key Deliverables:**
+
 - `docs/PROCESSING_LOGIC.md` - Detailed processing documentation
 - `app/services/` - All processing functions
 - `app/api/routes/admin.py` - Admin endpoint implementation
@@ -400,12 +439,14 @@ Create POST /api/coach/matches route that:
 **Total: 11 endpoints**
 
 For each endpoint:
+
 - Create route handler
 - Create schemas
 - Create CRUD operations
 - Write tests
 
 **Endpoints to Implement:**
+
 1. [ ] GET /api/coach/dashboard
 2. [ ] GET /api/coach/matches/{match_id}
 3. [ ] GET /api/coach/players
@@ -419,6 +460,7 @@ For each endpoint:
 11. [ ] DELETE /api/coach/training-plans/{plan_id}
 
 **Files to Create:**
+
 - `app/api/routes/coach.py` - Route handlers
 - `app/schemas/coach_*.py` - Request/response schemas
 - `app/crud/match.py`, `statistics.py`, `training.py` - CRUD operations
@@ -431,12 +473,14 @@ For each endpoint:
 **Total: 7 endpoints**
 
 For each endpoint:
+
 - Create route handler
 - Create schemas
 - Reuse CRUD where possible
 - Write tests
 
 **Endpoints to Implement:**
+
 1. [ ] GET /api/player/dashboard
 2. [ ] GET /api/player/matches
 3. [ ] GET /api/player/matches/{match_id}
@@ -446,6 +490,7 @@ For each endpoint:
 7. [ ] GET /api/player/profile
 
 **Files to Create:**
+
 - `app/api/routes/player.py` - Route handlers
 - `app/schemas/player_*.py` - Request/response schemas
 - Reuse CRUD from coach endpoints
@@ -556,6 +601,7 @@ Spinta_Backend/
 4. **Document Changes** - Update endpoint docs and schema docs immediately
 
 **Why this order makes sense:**
+
 - ✅ Phase 1 (Foundation): Auth and core infrastructure complete
 - ✅ Phase 2 (Models): All 15 database models created
 - → Phase 2.5 (Validation): Ensure schema matches UI/API requirements
@@ -567,6 +613,7 @@ Validating everything first prevents rework later and ensures the schema support
 ### Approach for Phase 2.5
 
 For each endpoint:
+
 1. Open corresponding UI page
 2. List all fields shown in UI
 3. Compare against endpoint spec
@@ -581,6 +628,7 @@ Track progress: Currently 0/18 endpoints validated
 ## Key Technical Challenges
 
 ### Solved ✅
+
 1. **UUID Compatibility** - GUID type with `load_dialect_impl` handles PostgreSQL UUID and SQLite String
 2. **Circular Imports** - Separated database.py from main.py
 3. **CORS Parsing** - Used `@property` decorator for list conversion
@@ -588,6 +636,7 @@ Track progress: Currently 0/18 endpoints validated
 5. **Invite Code Generation** - Cryptographically secure random codes
 
 ### To Solve ❌
+
 1. **StatsBomb Event Processing** - Parse and insert ~3000 events per match efficiently
 2. **Statistics Calculation** - Aggregate complex statistics from events JSONB
 3. **Team Matching** - Fuzzy match club name to StatsBomb team names
@@ -600,11 +649,13 @@ Track progress: Currently 0/18 endpoints validated
 ## Testing Strategy
 
 ### Current Coverage ✅
+
 - Health endpoint (5 tests)
 - Database models (comprehensive tests)
 - Authentication (all 4 endpoints with edge cases)
 
 ### Required Coverage ❌
+
 - All coach endpoints (11 endpoints)
 - All player endpoints (7 endpoints)
 - Admin match upload (complex integration test)
@@ -616,6 +667,7 @@ Track progress: Currently 0/18 endpoints validated
 ## Dependencies
 
 ### Installed ✅
+
 ```
 fastapi
 uvicorn[standard]
@@ -634,6 +686,7 @@ httpx
 ```
 
 ### May Need Later ❌
+
 - `redis` - For rate limiting
 - `celery` - For background jobs (if match processing is slow)
 - `anthropic` - For AI training plan generation
@@ -643,18 +696,21 @@ httpx
 ## Notes & Decisions
 
 ### Design Patterns
+
 - **Screen-based API**: One endpoint per UI screen with all required data
 - **Stateless JWT**: No expiration, client-side logout
 - **Incomplete Players**: Pre-created during match upload, completed during signup
 - **Player Attributes**: Calculated from season statistics using proprietary formulas
 
 ### Database Decisions
+
 - **User_id = Player_id**: Player's user_id matches their player_id after signup
 - **JSONB for Events**: Full StatsBomb event JSON stored for flexibility
 - **Opponent Separation**: Opponent clubs/players in separate tables
 - **Statistics Pre-calculation**: All statistics calculated and stored (not on-the-fly)
 
 ### Future Enhancements (Not in Scope)
+
 - Email verification
 - Token refresh mechanism
 - Password reset flow
@@ -671,6 +727,7 @@ httpx
 **Models Completed:** 15/15 tables (100%) - Pending revisions from Phase 2.5
 
 ### Phase Status
+
 - **Phase 1 (Foundation):** ✅ COMPLETE
 - **Phase 2 (Database Models):** ✅ COMPLETE - All 15 models created (pending revisions)
 - **Phase 2.5 (Endpoint & Schema Validation):** → IN PROGRESS - 0/18 endpoints validated
@@ -681,6 +738,7 @@ httpx
 **Current State:** All database models created. Now validating endpoints against UI and schema before implementation.
 
 **Implementation Order:**
+
 1. ✅ Phase 1: Foundation (auth, core models)
 2. ✅ Phase 2: All database models (schema)
 3. → Phase 2.5: Validate endpoints & schema (current)

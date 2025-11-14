@@ -666,9 +666,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "player_name": "Player #23",
       "jersey_number": 23,
       "profile_image_url": null,
-      "is_linked": false,
-      "invite_code": "SP23TH003",
-      "status": "Pending Invitation"
+      "is_linked": false
     },
     {
       "player_id": "player-uuid-4",
@@ -682,9 +680,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "player_name": "Player #9",
       "jersey_number": 9,
       "profile_image_url": null,
-      "is_linked": false,
-      "invite_code": "PLY-9982",
-      "status": "Pending Invitation"
+      "is_linked": false
     }
   ]
 }
@@ -707,8 +703,7 @@ SELECT
   player_name,
   jersey_number,
   profile_image_url,
-  is_linked,
-  invite_code
+  is_linked
 FROM players
 WHERE club_id = :club_id
 ORDER BY jersey_number;
