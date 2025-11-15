@@ -13,6 +13,47 @@ All endpoints require:
 
 For detailed authentication flow and endpoints, see `04_AUTHENTICATION.md` and `03_PLAYER_SIGNUP_FLOW.md`.
 
+## Database Query Parameters
+
+All database queries in this document use named parameters prefixed with `:`. This section explains how each parameter is derived.
+
+### Parameters Derived from JWT Token
+
+**Direct JWT Parameters** (extracted directly from JWT payload):
+- `:user_id_from_jwt` - The `user_id` field from the JWT token payload
+
+**Indirect JWT Parameters** (derived from JWT via database lookups):
+- `:club_id_from_jwt` - Club ID for the authenticated coach
+  - **Derivation:** JWT `user_id` → `coaches.user_id` → `clubs.coach_id` → `clubs.club_id`
+  - **SQL:** `SELECT c.club_id FROM users u JOIN coaches co ON u.user_id = co.user_id JOIN clubs c ON co.coach_id = c.coach_id WHERE u.user_id = :user_id_from_jwt`
+
+- `:coach_id_from_jwt` - Coach ID for the authenticated user
+  - **Derivation:** JWT `user_id` → `coaches.user_id` → `coaches.coach_id`
+  - **SQL:** `SELECT coach_id FROM coaches WHERE user_id = :user_id_from_jwt`
+
+### Parameters from API Requests
+
+**Path Parameters** (from URL):
+- `:match_id` - Match UUID from `/api/coach/matches/{match_id}`
+- `:player_id` - Player UUID from `/api/coach/players/{player_id}`
+- `:plan_id` - Training plan UUID from `/api/coach/training-plans/{plan_id}`
+
+**Query Parameters** (from URL query string):
+- `:matches_limit` - Pagination limit for matches list
+- `:matches_offset` - Pagination offset for matches list
+
+**Body Parameters** (from JSON request body):
+- `:plan_name`, `:duration`, `:coach_notes` - Training plan fields
+- Various exercise fields - Training exercise data
+
+### Authorization Pattern
+
+All endpoints follow this authorization pattern:
+1. Extract `:user_id_from_jwt` from JWT token
+2. Derive `:club_id_from_jwt` or `:coach_id_from_jwt` via database lookup
+3. Validate that requested resources (matches, players, training plans) belong to the coach's club
+4. Return 403 Forbidden if authorization check fails
+
 ## Endpoints Organized by UI Screens
 
 ---
@@ -172,7 +213,7 @@ SELECT
   avg_ball_recoveries,
   avg_saves_per_match
 FROM club_season_statistics
-WHERE club_id = :club_id;
+WHERE club_id = :club_id_from_jwt;
 
 -- 3. Get matches with pagination
 SELECT
@@ -695,7 +736,7 @@ SELECT
   COUNT(*) FILTER (WHERE is_linked = TRUE) as joined,
   COUNT(*) FILTER (WHERE is_linked = FALSE) as pending
 FROM players
-WHERE club_id = :club_id;
+WHERE club_id = :club_id_from_jwt;
 
 -- 2. Get all players
 SELECT
@@ -705,7 +746,7 @@ SELECT
   profile_image_url,
   is_linked
 FROM players
-WHERE club_id = :club_id
+WHERE club_id = :club_id_from_jwt
 ORDER BY jersey_number;
 ```
 
@@ -717,11 +758,9 @@ ORDER BY jersey_number;
 
 **UI Reference:** Pages 12-16 in Spinta UI.pdf
 
-**TODO:** Update this endpoint for new matches schema (`our_score`/`opponent_score`/`result` instead of `home_score`/`away_score`/`is_home_match`, no `match_time` field). Will be updated when we validate this endpoint.
-
 ### GET /api/coach/players/{player_id}
 
-**Description:** Returns complete player information including attributes, season statistics organized by categories, recent matches, and training plans.
+**Description:** Returns complete player information including attributes, season statistics organized by categories, paginated match history, and training plans.
 
 **Authentication:** Required (Coach only)
 
@@ -729,10 +768,15 @@ ORDER BY jersey_number;
 
 - `player_id` (required): UUID of the player
 
+**Query Parameters:**
+
+- `matches_limit` (optional): Number of matches to return (default: 20, max: 100)
+- `matches_offset` (optional): Number of matches to skip for pagination (default: 0)
+
 **Request:**
 
 ```
-GET /api/coach/players/player-uuid-1 HTTP/1.1
+GET /api/coach/players/player-uuid-1?matches_limit=20&matches_offset=0 HTTP/1.1
 Host: api.spinta.com
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
@@ -745,7 +789,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "player_id": "player-uuid-1",
     "player_name": "Marcus Silva",
     "jersey_number": 10,
-    "position": "Forward",
     "height": 180,
     "age": "23 years",
     "profile_image_url": "https://storage.example.com/players/marcus.jpg",
@@ -785,57 +828,47 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "interception_success_rate": 81
     }
   },
-  "recent_matches": {
-    "total_count": 5,
+  "matches": {
+    "total_count": 22,
     "matches": [
       {
         "match_id": "match-uuid-1",
         "opponent_name": "City Strikers",
         "match_date": "2025-10-08",
-        "match_time": "15:30",
-        "home_score": 3,
-        "away_score": 2,
-        "is_home_match": true,
+        "our_score": 3,
+        "opponent_score": 2,
         "result": "W"
       },
       {
         "match_id": "match-uuid-2",
         "opponent_name": "North Athletic",
         "match_date": "2025-10-01",
-        "match_time": "14:00",
-        "home_score": 1,
-        "away_score": 1,
-        "is_home_match": false,
+        "our_score": 1,
+        "opponent_score": 1,
         "result": "D"
       },
       {
         "match_id": "match-uuid-3",
         "opponent_name": "Valley Rangers",
         "match_date": "2025-10-01",
-        "match_time": "16:00",
-        "home_score": 2,
-        "away_score": 0,
-        "is_home_match": true,
+        "our_score": 2,
+        "opponent_score": 0,
         "result": "W"
       },
       {
         "match_id": "match-uuid-4",
         "opponent_name": "Harbor FC",
         "match_date": "2025-09-28",
-        "match_time": "15:00",
-        "home_score": 1,
-        "away_score": 3,
-        "is_home_match": true,
+        "our_score": 1,
+        "opponent_score": 3,
         "result": "L"
       },
       {
         "match_id": "match-uuid-5",
         "opponent_name": "Phoenix United",
         "match_date": "2025-09-24",
-        "match_time": "14:30",
-        "home_score": 4,
-        "away_score": 1,
-        "is_home_match": false,
+        "our_score": 4,
+        "opponent_score": 1,
         "result": "W"
       }
     ]
@@ -865,7 +898,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "player_id": "player-uuid-3",
     "player_name": "Player #23",
     "jersey_number": 23,
-    "position": "Forward",
     "height": null,
     "age": null,
     "profile_image_url": null,
@@ -905,37 +937,31 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "interception_success_rate": 73
     }
   },
-  "recent_matches": {
-    "total_count": 3,
+  "matches": {
+    "total_count": 12,
     "matches": [
       {
         "match_id": "match-uuid-10",
         "opponent_name": "City Strikers",
         "match_date": "2025-10-08",
-        "match_time": "15:30",
-        "home_score": 3,
-        "away_score": 2,
-        "is_home_match": true,
+        "our_score": 3,
+        "opponent_score": 2,
         "result": "W"
       },
       {
         "match_id": "match-uuid-11",
         "opponent_name": "North Athletic",
         "match_date": "2025-10-01",
-        "match_time": "14:00",
-        "home_score": 1,
-        "away_score": 1,
-        "is_home_match": false,
+        "our_score": 1,
+        "opponent_score": 1,
         "result": "D"
       },
       {
         "match_id": "match-uuid-12",
         "opponent_name": "Valley Rangers",
         "match_date": "2025-09-24",
-        "match_time": "16:00",
-        "home_score": 2,
-        "away_score": 1,
-        "is_home_match": true,
+        "our_score": 2,
+        "opponent_score": 1,
         "result": "W"
       }
     ]
@@ -952,11 +978,14 @@ SELECT
   p.player_id,
   p.player_name,
   p.jersey_number,
-  p.position,
   p.height,
+  p.birth_date,
   p.profile_image_url,
   p.is_linked,
-  p.invite_code,
+  CASE
+    WHEN p.is_linked = FALSE THEN p.invite_code
+    ELSE NULL
+  END as invite_code,
   pss.matches_played,
   pss.goals,
   pss.assists,
@@ -981,29 +1010,20 @@ LEFT JOIN player_season_statistics pss ON p.player_id = pss.player_id
 WHERE p.player_id = :player_id
   AND p.club_id = :club_id_from_jwt;
 
--- 2. Recent matches (last 5)
+-- 2. Get player's matches (paginated)
 SELECT
   m.match_id,
   m.opponent_name,
   m.match_date,
-  m.match_time,
-  m.home_score,
-  m.away_score,
-  m.is_home_match,
-  CASE
-    WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
-    WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
-    WHEN m.is_home_match AND m.home_score = m.away_score THEN 'D'
-    WHEN NOT m.is_home_match AND m.away_score > m.home_score THEN 'W'
-    WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
-    ELSE 'D'
-  END as result,
+  m.our_score,
+  m.opponent_score,
+  m.result,
   COUNT(*) OVER() as total_count
 FROM player_match_statistics pms
 JOIN matches m ON pms.match_id = m.match_id
 WHERE pms.player_id = :player_id
 ORDER BY m.match_date DESC
-LIMIT 5;
+LIMIT :matches_limit OFFSET :matches_offset;
 
 -- 3. Training plans
 SELECT
@@ -1042,8 +1062,6 @@ Forbidden (403):
 
 **UI Reference:** Page 15 in Spinta UI.pdf
 
-**TODO:** Update this endpoint for new matches schema (`our_score`/`opponent_score`/`result` instead of `home_score`/`away_score`/`is_home_match`, no `match_time` field). Will be updated when we validate this endpoint.
-
 ### GET /api/coach/players/{player_id}/matches/{match_id}
 
 **Description:** Returns detailed player statistics for a specific match. This is a simple page format (not tabbed) showing match info, player summary, and categorized statistics.
@@ -1070,10 +1088,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
   "match": {
     "match_id": "match-uuid-1",
     "match_date": "2025-10-08",
-    "match_time": "15:30",
-    "home_score": 3,
-    "away_score": 2,
-    "is_home_match": true,
+    "our_score": 3,
+    "opponent_score": 2,
     "result": "W"
   },
   "teams": {
@@ -1126,22 +1142,13 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 SELECT
   m.match_id,
   m.match_date,
-  m.match_time,
-  m.home_score,
-  m.away_score,
-  m.is_home_match,
+  m.our_score,
+  m.opponent_score,
+  m.result,
   c.club_name as our_club_name,
   c.logo_url as our_logo_url,
   m.opponent_name,
-  oc.logo_url as opponent_logo_url,
-  CASE
-    WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
-    WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
-    WHEN m.is_home_match AND m.home_score = m.away_score THEN 'D'
-    WHEN NOT m.is_home_match AND m.away_score > m.home_score THEN 'W'
-    WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
-    ELSE 'D'
-  END as result
+  oc.logo_url as opponent_logo_url
 FROM matches m
 LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
 JOIN clubs c ON m.club_id = c.club_id
@@ -1222,47 +1229,33 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 **Database Queries:**
 
 ```sql
--- 1. Get coach info
+-- 1. Get coach and club info
 SELECT
   u.full_name,
   u.email,
-  u.gender,
-  u.birth_date
-FROM users u
-WHERE u.user_id = :user_id_from_jwt;
-
--- 2. Get club info
-SELECT
+  co.gender,
+  co.birth_date,
   c.club_name,
   c.logo_url
-FROM clubs c
-JOIN coaches co ON c.coach_id = co.coach_id
-WHERE co.coach_id = :user_id_from_jwt;
+FROM users u
+JOIN coaches co ON u.user_id = co.user_id
+JOIN clubs c ON co.coach_id = c.coach_id
+WHERE u.user_id = :user_id_from_jwt;
 
--- 3. Get club statistics
--- Total players (linked players only)
+-- 2. Get total players (linked players only)
 SELECT COUNT(*) as total_players
 FROM players
-WHERE club_id = :club_id
+WHERE club_id = :club_id_from_jwt
   AND is_linked = TRUE;
 
--- Total matches
-SELECT COUNT(*) as total_matches
-FROM matches
-WHERE club_id = :club_id
-  AND home_score IS NOT NULL;
-
--- Calculate win rate
+-- 3. Get total matches and calculate win rate
 SELECT
+  matches_played as total_matches,
   ROUND(
-    (COUNT(*) FILTER (
-      WHERE (is_home_match AND home_score > away_score)
-         OR (NOT is_home_match AND away_score > home_score)
-    ) * 100.0 / NULLIF(COUNT(*), 0))
+    (wins * 100.0 / NULLIF(matches_played, 0))
   ) as win_rate_percentage
-FROM matches
-WHERE club_id = :club_id
-  AND home_score IS NOT NULL;
+FROM club_season_statistics
+WHERE club_id = :club_id_from_jwt;
 ```
 
 **Error Responses:**
@@ -1681,10 +1674,10 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 **Database Query:**
 
 ```sql
+-- 1. Get training plan details
 SELECT
   tp.plan_id,
   tp.plan_name,
-  tp.duration,
   tp.status,
   tp.coach_notes,
   tp.created_at,
@@ -1700,12 +1693,13 @@ SELECT
   te.completed
 FROM training_plans tp
 JOIN players p ON tp.player_id = p.player_id
+JOIN clubs c ON p.club_id = c.club_id
 LEFT JOIN training_exercises te ON tp.plan_id = te.plan_id
 WHERE tp.plan_id = :plan_id
-  AND p.club_id = :club_id_from_jwt
+  AND c.coach_id = :coach_id_from_jwt
 ORDER BY te.exercise_order;
 
--- Calculate progress
+-- 2. Calculate progress
 SELECT
   COUNT(*) as total_exercises,
   COUNT(CASE WHEN completed THEN 1 END) as completed_exercises,

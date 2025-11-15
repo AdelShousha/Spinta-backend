@@ -321,14 +321,14 @@ All specifications are in the `docs/` folder:
 1. [x] GET /api/coach/dashboard (Pages 6-7)
 2. [x] GET /api/coach/matches/{match_id} (Pages 8-10)
 3. [x] GET /api/coach/players (Page 11)
-4. [ ] GET /api/coach/players/{player_id} (Pages 12-16)
-5. [ ] GET /api/coach/players/{player_id}/matches/{match_id} (Page 15)
-6. [ ] GET /api/coach/profile (Page 20)
-7. [ ] POST /api/coach/training-plans/generate-ai (Pages 16-17)
-8. [ ] POST /api/coach/training-plans (Page 17)
-9. [ ] GET /api/coach/training-plans/{plan_id} (Page 18)
-10. [ ] PUT /api/coach/training-plans/{plan_id}
-11. [ ] DELETE /api/coach/training-plans/{plan_id}
+4. [X] GET /api/coach/players/{player_id} (Pages 12-16)
+5. [X] GET /api/coach/players/{player_id}/matches/{match_id} (Page 15)
+6. [X] GET /api/coach/profile (Page 20)
+7. [X] POST /api/coach/training-plans/generate-ai (Pages 16-17)
+8. [X] POST /api/coach/training-plans (Page 17)
+9. [X] GET /api/coach/training-plans/{plan_id} (Page 18)
+10. [X] PUT /api/coach/training-plans/{plan_id}
+11. [X] DELETE /api/coach/training-plans/{plan_id}
 
 #### Then Repeat for Player Endpoints (7 endpoints):
 
