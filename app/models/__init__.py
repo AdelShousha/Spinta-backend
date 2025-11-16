@@ -28,6 +28,7 @@ from app.models.player import Player
 
 from app.models.opponent_club import OpponentClub
 from app.models.match import Match
+from app.models.match_lineup import MatchLineup
 from app.models.opponent_player import OpponentPlayer
 from app.models.goal import Goal
 from app.models.event import Event
@@ -57,6 +58,7 @@ __all__ = [
     "Player",
     "OpponentClub",
     "Match",
+    "MatchLineup",
     "OpponentPlayer",
     "Goal",
     "Event",

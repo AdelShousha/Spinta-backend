@@ -10,7 +10,7 @@ Key Features:
 - Used for coach dashboard display
 """
 
-from sqlalchemy import Column, Integer, ForeignKey, Index, Numeric
+from sqlalchemy import Column, String, Integer, ForeignKey, Index, Numeric
 from sqlalchemy.orm import relationship
 from app.models.base import Base, TimestampMixin, GUID, generate_uuid
 
@@ -81,6 +81,7 @@ class ClubSeasonStatistics(Base, TimestampMixin):
     losses = Column(Integer, nullable=False, server_default="0", comment="Losses")
     goals_scored = Column(Integer, nullable=False, server_default="0", comment="Total goals scored")
     goals_conceded = Column(Integer, nullable=False, server_default="0", comment="Total goals conceded")
+    total_assists = Column(Integer, nullable=False, server_default="0", comment="Total assists")
     total_clean_sheets = Column(Integer, nullable=False, server_default="0", comment="Clean sheets")
 
     # Averages and rates
@@ -102,6 +103,9 @@ class ClubSeasonStatistics(Base, TimestampMixin):
     interception_success_rate = Column(Numeric(5, 2), nullable=True, comment="Overall interception success %")
     avg_ball_recoveries = Column(Numeric(5, 2), nullable=True, comment="Avg ball recoveries")
     avg_saves_per_match = Column(Numeric(5, 2), nullable=True, comment="Avg goalkeeper saves")
+
+    # Form and trends
+    team_form = Column(String(5), nullable=True, comment="Last 5 match results (e.g., 'WWDLW')")
 
     # Timestamps inherited from TimestampMixin
     # created_at, updated_at

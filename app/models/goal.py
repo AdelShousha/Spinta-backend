@@ -6,11 +6,10 @@ Stores goal events from matches extracted from StatsBomb event data.
 Key Features:
 - Extracted from StatsBomb shot events with successful outcomes
 - Used for goals timeline display in match details
-- team_name can be our club or opponent
-- assist_name is nullable (not all goals have assists)
+- is_our_goal indicates whether it was scored by our team or opponent
 """
 
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Index, func
+from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, DateTime, Index, func
 from sqlalchemy.orm import relationship
 from app.models.base import Base, GUID, generate_uuid
 
@@ -24,14 +23,10 @@ class Goal(Base):
     Attributes:
         goal_id: Unique identifier for the goal
         match_id: Foreign key to match (CASCADE on delete)
-        team_name: Team that scored the goal
         scorer_name: Player who scored
-        assist_name: Player who assisted (nullable)
         minute: Match minute when goal was scored
         second: Second within minute (nullable)
-        period: Match period (1, 2, etc.)
-        goal_type: Type of goal (Open Play, Penalty, etc.)
-        body_part: Body part used (Right Foot, Header, etc.)
+        is_our_goal: True if scored by our team, False if opponent
         created_at: Timestamp when record was created
 
     Relationships:
@@ -57,22 +52,10 @@ class Goal(Base):
     )
 
     # Goal information
-    team_name = Column(
-        String(255),
-        nullable=False,
-        comment="Team that scored"
-    )
-
     scorer_name = Column(
         String(255),
         nullable=False,
         comment="Player who scored"
-    )
-
-    assist_name = Column(
-        String(255),
-        nullable=True,
-        comment="Player who assisted (nullable)"
     )
 
     minute = Column(
@@ -87,22 +70,10 @@ class Goal(Base):
         comment="Second within minute"
     )
 
-    period = Column(
-        Integer,
+    is_our_goal = Column(
+        Boolean,
         nullable=False,
-        comment="Match period (1, 2, etc.)"
-    )
-
-    goal_type = Column(
-        String(50),
-        nullable=True,
-        comment="Type of goal (Open Play, Penalty, etc.)"
-    )
-
-    body_part = Column(
-        String(50),
-        nullable=True,
-        comment="Body part used (Right Foot, Header, etc.)"
+        comment="True if scored by our team, False if opponent"
     )
 
     # Timestamp (created_at only, no updated_at)

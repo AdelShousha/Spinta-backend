@@ -52,7 +52,6 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "player_id": "player-uuid-1",
     "player_name": "Marcus Silva",
     "jersey_number": 10,
-    "position": "Forward",
     "height": 180,
     "age": "23 years",
     "profile_image_url": "https://storage.example.com/players/marcus.jpg"
@@ -73,20 +72,15 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "assists": 7,
       "expected_goals": 10.8,
       "shots_per_game": 4.2,
-      "shots_on_target_per_game": 2.8,
-      "goals_per_game": 0.55
+      "shots_on_target_per_game": 2.8
     },
     "passing": {
       "total_passes": 1144,
-      "passes_completed": 995,
-      "pass_accuracy": 86.9,
-      "key_passes": 58,
-      "crosses_completed": 23
+      "passes_completed": 995
     },
     "dribbling": {
       "total_dribbles": 158,
-      "successful_dribbles": 118,
-      "dribble_success_rate": 74.7
+      "successful_dribbles": 118
     },
     "defending": {
       "tackles": 45,
@@ -106,9 +100,8 @@ SELECT
   player_id,
   player_name,
   jersey_number,
-  position,
   height,
-  birth_date,
+  birth_date, -- For calculating age
   profile_image_url
 FROM players
 WHERE player_id = :player_id_from_jwt;
@@ -131,19 +124,14 @@ SELECT
   expected_goals,
   shots_per_game,
   shots_on_target_per_game,
-  (goals::decimal / NULLIF(matches_played, 0)) as goals_per_game,
 
   -- Passing
   total_passes,
   passes_completed,
-  (passes_completed * 100.0 / NULLIF(total_passes, 0)) as pass_accuracy,
-  key_passes,
-  crosses_completed,
 
   -- Dribbling
   total_dribbles,
   successful_dribbles,
-  (successful_dribbles * 100.0 / NULLIF(total_dribbles, 0)) as dribble_success_rate,
 
   -- Defending
   tackles,
@@ -183,8 +171,6 @@ Forbidden (403):
 
 **UI Purpose:** Display all matches the player participated in with their personal stats.
 
-**TODO:** Update this endpoint for new matches schema (`our_score`/`opponent_score`/`result` instead of `home_score`/`away_score`/`is_home_match`, no `match_time` field). Will be updated when we validate this endpoint.
-
 ### GET /api/player/matches
 
 **Description:** Returns paginated list of all matches with player's statistics for each match.
@@ -214,20 +200,16 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
       "match_id": "match-uuid-1",
       "opponent_name": "City Strikers",
       "match_date": "2025-10-08",
-      "match_time": "15:30",
-      "home_score": 3,
-      "away_score": 2,
-      "is_home_match": true,
+      "our_score": 3,
+      "opponent_score": 2,
       "result": "W"
     },
     {
       "match_id": "match-uuid-2",
       "opponent_name": "North Athletic",
       "match_date": "2025-10-01",
-      "match_time": "14:00",
-      "home_score": 1,
-      "away_score": 1,
-      "is_home_match": true,
+      "our_score": 1,
+      "opponent_score": 1,
       "result": "D"
     }
   ]
@@ -241,18 +223,9 @@ SELECT
   m.match_id,
   m.opponent_name,
   m.match_date,
-  m.match_time,
-  m.home_score,
-  m.away_score,
-  m.is_home_match,
-  CASE
-    WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
-    WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
-    WHEN m.is_home_match AND m.home_score = m.away_score THEN 'D'
-    WHEN NOT m.is_home_match AND m.away_score > m.home_score THEN 'W'
-    WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
-    ELSE 'D'
-  END as result,
+  m.our_score,
+  m.opponent_score,
+  m.result,
   COUNT(*) OVER() as total_count
 FROM player_match_statistics pms
 JOIN matches m ON pms.match_id = m.match_id
@@ -268,8 +241,6 @@ LIMIT :limit OFFSET :offset;
 **UI Reference:** Page 27 in Spinta UI.pdf
 
 **UI Purpose:** Display player's individual performance in a specific match - simple page showing match header, player summary (goals/assists), and statistics sections. This is identical to the coach's view of player match detail (Page 15).
-
-**TODO:** Update this endpoint for new matches schema (`our_score`/`opponent_score`/`result` instead of `home_score`/`away_score`/`is_home_match`, no `match_time` field). Will be updated when we validate this endpoint.
 
 ### GET /api/player/matches/{match_id}
 
@@ -296,10 +267,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
   "match": {
     "match_id": "match-uuid-1",
     "match_date": "2025-10-08",
-    "match_time": "15:30",
-    "home_score": 3,
-    "away_score": 2,
-    "is_home_match": true,
+    "our_score": 3,
+    "opponent_score": 2,
     "result": "W"
   },
   "teams": {
@@ -352,22 +321,13 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 SELECT
   m.match_id,
   m.match_date,
-  m.match_time,
-  m.home_score,
-  m.away_score,
-  m.is_home_match,
+  m.our_score,
+  m.opponent_score,
+  m.result,
   c.club_name as our_club_name,
   c.logo_url as our_logo_url,
   m.opponent_name,
-  oc.logo_url as opponent_logo_url,
-  CASE
-    WHEN m.is_home_match AND m.home_score > m.away_score THEN 'W'
-    WHEN m.is_home_match AND m.home_score < m.away_score THEN 'L'
-    WHEN m.is_home_match AND m.home_score = m.away_score THEN 'D'
-    WHEN NOT m.is_home_match AND m.away_score > m.home_score THEN 'W'
-    WHEN NOT m.is_home_match AND m.away_score < m.home_score THEN 'L'
-    ELSE 'D'
-  END as result
+  oc.logo_url as opponent_logo_url
 FROM matches m
 LEFT JOIN opponent_clubs oc ON m.opponent_club_id = oc.opponent_club_id
 JOIN clubs c ON m.club_id = c.club_id
@@ -432,14 +392,10 @@ Forbidden (403):
 
 **Authentication:** Required (Player only)
 
-**Query Parameters:**
-
-- `status` (optional): Filter by status ('all', 'pending', 'in_progress', 'completed'). Default: 'all'
-
 **Request:**
 
 ```
-GET /api/player/training?status=all HTTP/1.1
+GET /api/player/training HTTP/1.1
 Host: api.spinta.com
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
@@ -481,14 +437,7 @@ SELECT
   status
 FROM training_plans
 WHERE player_id = :player_id_from_jwt
-  AND (status = :status OR :status = 'all')
-ORDER BY
-  CASE status
-    WHEN 'in_progress' THEN 1
-    WHEN 'pending' THEN 2
-    WHEN 'completed' THEN 3
-  END,
-  created_at DESC;
+ORDER BY created_at DESC;
 ```
 
 ---
@@ -573,21 +522,18 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 }
 ```
 
-**Database Query:**
+**Database Queries:**
 
 ```sql
+-- 1. Get training plan details
 SELECT
   tp.plan_id,
   tp.plan_name,
+  tp.status,
+  tp.coach_notes,
+  tp.created_at,
   p.player_name,
   p.jersey_number as player_jersey,
-  tp.status,
-  tp.created_at,
-  tp.coach_notes,
-  COUNT(te.exercise_id) as total_exercises,
-  COUNT(CASE WHEN te.completed THEN 1 END) as completed_exercises,
-  (COUNT(CASE WHEN te.completed THEN 1 END) * 100.0 /
-   NULLIF(COUNT(te.exercise_id), 0)) as percentage,
   te.exercise_id,
   te.exercise_name,
   te.description,
@@ -603,6 +549,14 @@ LEFT JOIN training_exercises te ON tp.plan_id = te.plan_id
 WHERE tp.plan_id = :plan_id
   AND tp.player_id = :player_id_from_jwt
 ORDER BY te.exercise_order;
+
+-- 2. Calculate progress
+SELECT
+  COUNT(*) as total_exercises,
+  COUNT(CASE WHEN completed THEN 1 END) as completed_exercises,
+  (COUNT(CASE WHEN completed THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0)) as percentage
+FROM training_exercises
+WHERE plan_id = :plan_id;
 ```
 
 **Error Responses:**
@@ -780,8 +734,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
     "profile_image_url": "https://storage.example.com/players/marcus.jpg"
   },
   "club": {
-    "club_name": "Thunder United FC",
-    "coach_name": "John Smith"
+    "club_name": "Thunder United FC"
   },
   "season_summary": {
     "matches_played": 22,
@@ -804,13 +757,10 @@ SELECT
   p.height,
   p.birth_date,
   p.profile_image_url,
-  c.club_name,
-  coach_user.full_name as coach_name
+  c.club_name
 FROM players p
 JOIN users u ON p.player_id = u.user_id
 JOIN clubs c ON p.club_id = c.club_id
-JOIN coaches co ON c.coach_id = co.coach_id
-JOIN users coach_user ON co.coach_id = coach_user.user_id
 WHERE p.player_id = :player_id_from_jwt;
 
 -- 2. Season summary

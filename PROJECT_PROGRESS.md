@@ -1,6 +1,6 @@
 # Spinta Backend - Project Progress Tracker
 
-**Last Updated:** 2025-11-13
+**Last Updated:** 2025-11-16
 **Approach:** Test-Driven Development (TDD)
 **Database:** PostgreSQL (Neon) for production, SQLite for testing
 
@@ -276,13 +276,13 @@ All specifications are in the `docs/` folder:
 
 ---
 
-### → Phase 2.5: Endpoint & Schema Validation (IN PROGRESS)
+### ✅ Phase 2.5: Endpoint & Schema Validation (COMPLETED)
 
-**Status:** Validating all endpoints and schema before implementation
+**Status:** All endpoints validated and schema changes applied successfully
 
 **Goal:** For each endpoint, validate UI → API → Database in one pass, making corrections immediately.
 
-**Progress:** 0/18 endpoints validated
+**Progress:** 18/18 endpoints validated ✅
 
 #### Workflow (Repeat for Each Endpoint)
 
@@ -332,23 +332,51 @@ All specifications are in the `docs/` folder:
 
 #### Then Repeat for Player Endpoints (7 endpoints):
 
-1. [ ] GET /api/player/dashboard (Page 25)
-2. [ ] GET /api/player/matches (Page 26)
-3. [ ] GET /api/player/matches/{match_id} (Page 27)
-4. [ ] GET /api/player/training (Page 28)
-5. [ ] GET /api/player/training/{plan_id} (Page 29)
-6. [ ] PUT /api/player/training/exercises/{exercise_id}/toggle (Page 29)
-7. [ ] GET /api/player/profile (Page 30)
+1. [X] GET /api/player/dashboard (Page 25)
+2. [X] GET /api/player/matches (Page 26)
+3. [X] GET /api/player/matches/{match_id} (Page 27)
+4. [X] GET /api/player/training (Page 28)
+5. [X] GET /api/player/training/{plan_id} (Page 29)
+6. [X] PUT /api/player/training/exercises/{exercise_id}/toggle (Page 29)
+7. [X] GET /api/player/profile (Page 30)
 
-#### Final Step: Apply Schema Changes to Models
+#### Final Step: Apply Schema Changes to Models ✅
 
 After all endpoints validated:
 
-- Review all changes in `docs/02_DATABASE_SCHEMA.md`
-- Update model files in `app/models/` accordingly
-- Generate Alembic migrations
-- Apply migrations
-- Update tests if needed
+- [x] Review all changes in `docs/MODEL_CHANGES.md`
+- [x] Update model files in `app/models/` accordingly
+- [x] Generate Alembic migrations
+- [x] Apply migrations
+- [x] Update tests if needed
+
+**Schema Changes Applied:**
+
+- **Match Model** (app/models/match.py):
+  - Removed: `match_time`, `is_home_match`, `home_score`, `away_score`
+  - Added: `our_score`, `opponent_score`, `result` (W/D/L)
+  - Added relationship: `lineups` (one-to-many with MatchLineup)
+
+- **Goal Model** (app/models/goal.py):
+  - Removed: `team_name`, `assist_name`, `period`, `goal_type`, `body_part`
+  - Added: `is_our_goal` (Boolean)
+  - Retained: `scorer_name`, `minute`, `second`
+
+- **NEW: MatchLineup Model** (app/models/match_lineup.py):
+  - Created new model to track match lineups for both teams
+  - Fields: `lineup_id`, `match_id`, `team_type`, `player_id`, `opponent_player_id`, `player_name`, `jersey_number`, `position`
+  - Supports both our team and opponent team players
+
+- **ClubSeasonStatistics Model** (app/models/club_season_statistics.py):
+  - Added: `total_assists` (Integer)
+  - Added: `team_form` (String, e.g., "WWDLW")
+
+**Migration Applied:**
+- `90388be62f06_apply_phase_2_5_schema_changes.py` - Applied successfully
+
+**Testing:**
+- Updated all affected tests in `tests/test_models.py`
+- All 26 model tests pass ✅
 
 **Benefits of Endpoint-by-Endpoint Approach:**
 
@@ -539,6 +567,7 @@ Spinta_Backend/
 │   │   ├── opponent_club.py ✅
 │   │   ├── opponent_player.py ✅
 │   │   ├── match.py ✅
+│   │   ├── match_lineup.py ✅
 │   │   ├── goal.py ✅
 │   │   ├── event.py ✅
 │   │   ├── match_statistics.py ✅
@@ -589,39 +618,19 @@ Spinta_Backend/
 
 ## Next Steps
 
-### Immediate: Phase 2.5 - Endpoint & Schema Validation
+### Immediate: Phase 3 - Admin Endpoint Processing Logic
 
-**Current Task:** Validate first coach endpoint (Dashboard - Pages 6-7)
-
-**Workflow for Each Endpoint:**
-
-1. **Review UI** - Check pages in `docs/Spinta UI.pdf`
-2. **Compare API** - Verify request/response in endpoint docs
-3. **Validate Queries** - Check database can support all fields
-4. **Document Changes** - Update endpoint docs and schema docs immediately
+**Current Task:** Build data processing incrementally from raw JSON to database tables
 
 **Why this order makes sense:**
 
 - ✅ Phase 1 (Foundation): Auth and core infrastructure complete
 - ✅ Phase 2 (Models): All 15 database models created
-- → Phase 2.5 (Validation): Ensure schema matches UI/API requirements
+- ✅ Phase 2.5 (Validation): Schema validated and updated to match UI/API requirements
 - → Phase 3 (Admin Processing): Build data processing systematically
 - → Phase 4-5 (Implementation): Implement validated endpoints with confidence
 
-Validating everything first prevents rework later and ensures the schema supports all UI requirements.
-
-### Approach for Phase 2.5
-
-For each endpoint:
-
-1. Open corresponding UI page
-2. List all fields shown in UI
-3. Compare against endpoint spec
-4. Test if database queries work
-5. Update docs immediately
-6. Move to next endpoint
-
-Track progress: Currently 0/18 endpoints validated
+With all endpoints validated and schema finalized, we can now build the admin match upload processing logic with confidence that our database structure fully supports all UI requirements.
 
 ---
 
@@ -724,25 +733,26 @@ httpx
 ## Summary
 
 **Completed:** 4/23 endpoints (17%)
-**Models Completed:** 15/15 tables (100%) - Pending revisions from Phase 2.5
+**Models Completed:** 15/15 tables (100%) ✅
+**Endpoints Validated:** 18/18 endpoints (100%) ✅
 
 ### Phase Status
 
 - **Phase 1 (Foundation):** ✅ COMPLETE
-- **Phase 2 (Database Models):** ✅ COMPLETE - All 15 models created (pending revisions)
-- **Phase 2.5 (Endpoint & Schema Validation):** → IN PROGRESS - 0/18 endpoints validated
+- **Phase 2 (Database Models):** ✅ COMPLETE - All 15 models created
+- **Phase 2.5 (Endpoint & Schema Validation):** ✅ COMPLETE - 18/18 endpoints validated, schema changes applied
 - **Phase 3 (Admin Endpoint Processing):** ❌ NOT STARTED - Data processing logic & implementation
 - **Phase 4 (Coach Endpoints):** ❌ NOT STARTED - 11 endpoints to implement
 - **Phase 5 (Player Endpoints):** ❌ NOT STARTED - 7 endpoints to implement
 
-**Current State:** All database models created. Now validating endpoints against UI and schema before implementation.
+**Current State:** All database models finalized and validated against UI requirements. Schema changes applied successfully. Ready to implement admin match upload processing.
 
 **Implementation Order:**
 
 1. ✅ Phase 1: Foundation (auth, core models)
 2. ✅ Phase 2: All database models (schema)
-3. → Phase 2.5: Validate endpoints & schema (current)
-4. → Phase 3: Admin data processing (systematic build)
+3. ✅ Phase 2.5: Validate endpoints & schema
+4. → Phase 3: Admin data processing (current)
 5. → Phase 4: Implement coach endpoints
 6. → Phase 5: Implement player endpoints
 

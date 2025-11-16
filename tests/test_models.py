@@ -935,7 +935,7 @@ class TestMatchRelatedModels:
 
         Scenarios:
         - Create match with club and opponent_club foreign keys
-        - Test nullable fields (opponent_club_id, match_time, scores)
+        - Test nullable fields (opponent_club_id, scores, result)
         - Test CASCADE delete for club_id
         - Test SET NULL for opponent_club_id
         """
@@ -954,10 +954,9 @@ class TestMatchRelatedModels:
             opponent_club_id=opponent.opponent_club_id,
             opponent_name="North Athletic",
             match_date=date(2025, 10, 8),
-            match_time=datetime.strptime("15:30:00", "%H:%M:%S").time(),
-            is_home_match=True,
-            home_score=3,
-            away_score=2
+            our_score=3,
+            opponent_score=2,
+            result="W"
         )
         session.add(match)
         session.commit()
@@ -969,12 +968,10 @@ class TestMatchRelatedModels:
         assert match.opponent_club_id == opponent.opponent_club_id
         assert match.opponent_name == "North Athletic"
         assert match.match_date == date(2025, 10, 8)
-        assert match.match_time is not None
-        assert match.is_home_match is True
-        assert match.home_score == 3
-        assert match.away_score == 2
+        assert match.our_score == 3
+        assert match.opponent_score == 2
+        assert match.result == "W"
         assert match.created_at is not None
-        assert match.updated_at is not None
 
         # Test relationships
         assert match.club.club_id == sample_club.club_id
@@ -984,17 +981,16 @@ class TestMatchRelatedModels:
         upcoming_match = Match(
             club_id=sample_club.club_id,
             opponent_name="Future Opponent",
-            match_date=date(2025, 11, 15),
-            is_home_match=False
+            match_date=date(2025, 11, 15)
         )
         session.add(upcoming_match)
         session.commit()
         session.refresh(upcoming_match)
 
         assert upcoming_match.opponent_club_id is None
-        assert upcoming_match.match_time is None
-        assert upcoming_match.home_score is None
-        assert upcoming_match.away_score is None
+        assert upcoming_match.our_score is None
+        assert upcoming_match.opponent_score is None
+        assert upcoming_match.result is None
 
         # Test CASCADE delete for club
         match_id = match.match_id
@@ -1062,7 +1058,7 @@ class TestMatchRelatedModels:
 
         Scenarios:
         - Create goal linked to match
-        - Test nullable assist_name
+        - Test is_our_goal field (True for our goals, False for opponent goals)
         - Test CASCADE delete when match deleted
         """
         from app.models.opponent_club import OpponentClub
@@ -1074,68 +1070,175 @@ class TestMatchRelatedModels:
             club_id=sample_club.club_id,
             opponent_name="Harbor FC",
             match_date=date(2025, 9, 28),
-            is_home_match=True,
-            home_score=2,
-            away_score=1
+            our_score=2,
+            opponent_score=1,
+            result="W"
         )
         session.add(match)
         session.commit()
         session.refresh(match)
 
-        # Test goal creation with assist
-        goal = Goal(
+        # Test our goal creation
+        our_goal = Goal(
             match_id=match.match_id,
-            team_name="Thunder United FC",
             scorer_name="Marcus Silva",
-            assist_name="Jake Thompson",
             minute=23,
             second=45,
-            period=1,
-            goal_type="Open Play",
-            body_part="Right Foot"
+            is_our_goal=True
         )
-        session.add(goal)
+        session.add(our_goal)
         session.commit()
-        session.refresh(goal)
+        session.refresh(our_goal)
 
         # Verify all fields
-        assert goal.goal_id is not None
-        assert goal.match_id == match.match_id
-        assert goal.team_name == "Thunder United FC"
-        assert goal.scorer_name == "Marcus Silva"
-        assert goal.assist_name == "Jake Thompson"
-        assert goal.minute == 23
-        assert goal.second == 45
-        assert goal.period == 1
-        assert goal.goal_type == "Open Play"
-        assert goal.body_part == "Right Foot"
-        assert goal.created_at is not None
+        assert our_goal.goal_id is not None
+        assert our_goal.match_id == match.match_id
+        assert our_goal.scorer_name == "Marcus Silva"
+        assert our_goal.minute == 23
+        assert our_goal.second == 45
+        assert our_goal.is_our_goal is True
+        assert our_goal.created_at is not None
 
         # Test relationship
-        assert goal.match.match_id == match.match_id
+        assert our_goal.match.match_id == match.match_id
 
-        # Test nullable assist (unassisted goal)
-        unassisted_goal = Goal(
+        # Test opponent goal
+        opponent_goal = Goal(
             match_id=match.match_id,
-            team_name="Thunder United FC",
-            scorer_name="David Chen",
+            scorer_name="Opponent Player",
             minute=78,
-            period=2,
-            goal_type="Penalty"
+            second=12,
+            is_our_goal=False
         )
-        session.add(unassisted_goal)
+        session.add(opponent_goal)
         session.commit()
-        session.refresh(unassisted_goal)
+        session.refresh(opponent_goal)
 
-        assert unassisted_goal.assist_name is None
+        assert opponent_goal.is_our_goal is False
+        assert opponent_goal.scorer_name == "Opponent Player"
 
         # Test CASCADE delete
-        goal_id = goal.goal_id
+        goal_id = our_goal.goal_id
         session.delete(match)
         session.commit()
 
         deleted_goal = session.query(Goal).filter(Goal.goal_id == goal_id).first()
         assert deleted_goal is None
+
+    def test_match_lineup_creation(self, session, sample_club):
+        """
+        Test MatchLineup model creation and relationships.
+
+        Scenarios:
+        - Create lineup entries for both our team and opponent team
+        - Test player_id and opponent_player_id relationships
+        - Test CASCADE delete when match deleted
+        - Test team_type constraint ('our_team' or 'opponent_team')
+        """
+        from app.models.match import Match
+        from app.models.match_lineup import MatchLineup
+        from app.models.player import Player
+        from app.models.opponent_club import OpponentClub
+        from app.models.opponent_player import OpponentPlayer
+
+        # Create match
+        match = Match(
+            club_id=sample_club.club_id,
+            opponent_name="Rival FC",
+            match_date=date(2025, 10, 15),
+            our_score=2,
+            opponent_score=1,
+            result="W"
+        )
+        session.add(match)
+        session.commit()
+        session.refresh(match)
+
+        # Create our player
+        our_player = Player(
+            club_id=sample_club.club_id,
+            player_name="John Striker",
+            jersey_number=9,
+            position="Forward",
+            invite_code="LNP-9999"
+        )
+        session.add(our_player)
+        session.commit()
+        session.refresh(our_player)
+
+        # Create opponent club and player
+        opponent_club = OpponentClub(opponent_name="Rival FC")
+        session.add(opponent_club)
+        session.commit()
+        session.refresh(opponent_club)
+
+        opponent_player = OpponentPlayer(
+            opponent_club_id=opponent_club.opponent_club_id,
+            player_name="Opponent Defender",
+            jersey_number=5,
+            position="Defender"
+        )
+        session.add(opponent_player)
+        session.commit()
+        session.refresh(opponent_player)
+
+        # Create lineup entry for our team
+        our_lineup = MatchLineup(
+            match_id=match.match_id,
+            team_type="our_team",
+            player_id=our_player.player_id,
+            player_name="John Striker",
+            jersey_number=9,
+            position="Forward"
+        )
+        session.add(our_lineup)
+        session.commit()
+        session.refresh(our_lineup)
+
+        # Verify our team lineup
+        assert our_lineup.lineup_id is not None
+        assert our_lineup.match_id == match.match_id
+        assert our_lineup.team_type == "our_team"
+        assert our_lineup.player_id == our_player.player_id
+        assert our_lineup.opponent_player_id is None
+        assert our_lineup.player_name == "John Striker"
+        assert our_lineup.jersey_number == 9
+        assert our_lineup.position == "Forward"
+        assert our_lineup.created_at is not None
+
+        # Create lineup entry for opponent team
+        opponent_lineup = MatchLineup(
+            match_id=match.match_id,
+            team_type="opponent_team",
+            opponent_player_id=opponent_player.opponent_player_id,
+            player_name="Opponent Defender",
+            jersey_number=5,
+            position="Defender"
+        )
+        session.add(opponent_lineup)
+        session.commit()
+        session.refresh(opponent_lineup)
+
+        # Verify opponent team lineup
+        assert opponent_lineup.lineup_id is not None
+        assert opponent_lineup.team_type == "opponent_team"
+        assert opponent_lineup.player_id is None
+        assert opponent_lineup.opponent_player_id == opponent_player.opponent_player_id
+        assert opponent_lineup.player_name == "Opponent Defender"
+
+        # Test relationships
+        assert our_lineup.match.match_id == match.match_id
+        assert our_lineup.player.player_id == our_player.player_id
+        assert opponent_lineup.opponent_player.opponent_player_id == opponent_player.opponent_player_id
+
+        # Test CASCADE delete when match deleted
+        lineup_id = our_lineup.lineup_id
+        session.delete(match)
+        session.commit()
+
+        from app.models.match_lineup import MatchLineup
+        deleted_lineup = session.query(MatchLineup).filter(MatchLineup.lineup_id == lineup_id).first()
+        assert deleted_lineup is None
 
     def test_event_jsonb_storage(self, session, sample_club):
         """
@@ -1154,8 +1257,7 @@ class TestMatchRelatedModels:
         match = Match(
             club_id=sample_club.club_id,
             opponent_name="Phoenix United",
-            match_date=date(2025, 9, 24),
-            is_home_match=False
+            match_date=date(2025, 9, 24)
         )
         session.add(match)
         session.commit()
@@ -1247,9 +1349,9 @@ class TestStatisticsModels:
             club_id=sample_club.club_id,
             opponent_name="Test Opponent",
             match_date=date(2025, 10, 1),
-            is_home_match=True,
-            home_score=2,
-            away_score=1
+            our_score=2,
+            opponent_score=1,
+            result="W"
         )
         session.add(match)
         session.commit()
@@ -1336,8 +1438,7 @@ class TestStatisticsModels:
         match = Match(
             club_id=sample_club.club_id,
             opponent_name="Test Opponent",
-            match_date=date(2025, 10, 1),
-            is_home_match=True
+            match_date=date(2025, 10, 1)
         )
         session.add(match)
         session.commit()
@@ -1400,11 +1501,13 @@ class TestStatisticsModels:
             losses=2,
             goals_scored=22,
             goals_conceded=12,
+            total_assists=15,
             total_clean_sheets=4,
             avg_goals_per_match=Decimal("2.20"),
             avg_possession_percentage=Decimal("54.5"),
             avg_xg_per_match=Decimal("1.85"),
-            pass_completion_rate=Decimal("82.3")
+            pass_completion_rate=Decimal("82.3"),
+            team_form="WWDLW"
         )
         session.add(club_stats)
         session.commit()
@@ -1418,6 +1521,8 @@ class TestStatisticsModels:
         assert club_stats.draws == 2
         assert club_stats.losses == 2
         assert club_stats.goals_scored == 22
+        assert club_stats.total_assists == 15
+        assert club_stats.team_form == "WWDLW"
         assert club_stats.avg_goals_per_match == Decimal("2.20")
         assert club_stats.updated_at is not None
 

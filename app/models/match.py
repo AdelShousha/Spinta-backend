@@ -6,11 +6,11 @@ Stores match records between our club and opponent clubs.
 Key Features:
 - Links to both our club and opponent club
 - Denormalized opponent_name for easier queries
-- Scores are NULL until match is completed
+- Scores and result are NULL until match is completed
 - Created by coach uploading match video and StatsBomb data
 """
 
-from sqlalchemy import Column, String, Date, Time, Boolean, Integer, ForeignKey, DateTime, Index, func
+from sqlalchemy import Column, String, Date, Integer, ForeignKey, DateTime, Index, func
 from sqlalchemy.orm import relationship
 from app.models.base import Base, GUID, generate_uuid
 
@@ -23,14 +23,13 @@ class Match(Base):
 
     Attributes:
         match_id: Unique identifier for the match
-        club_id: Foreign key to our club (nullable, SET NULL on delete)
+        club_id: Foreign key to our club (CASCADE on delete)
         opponent_club_id: Foreign key to opponent club (CASCADE on delete)
         opponent_name: Denormalized opponent name for easier queries
         match_date: Date when the match took place
-        match_time: Kickoff time (nullable)
-        is_home_match: True if home match, False if away
-        home_score: Final home team score (nullable until match complete)
-        away_score: Final away team score (nullable until match complete)
+        our_score: Our club's final score (nullable until match complete)
+        opponent_score: Opponent's final score (nullable until match complete)
+        result: Match result from our perspective: W/D/L (nullable until match complete)
         created_at: Timestamp when record was created
 
     Relationships:
@@ -38,7 +37,9 @@ class Match(Base):
         - opponent_club: Many-to-one with OpponentClub model
         - goals: One-to-many with Goal model (CASCADE delete)
         - events: One-to-many with Event model (CASCADE delete)
-        - match_statistics: One-to-one with MatchStatistics model
+        - match_statistics: One-to-many with MatchStatistics model (CASCADE delete)
+        - player_match_statistics: One-to-many with PlayerMatchStatistics model (CASCADE delete)
+        - lineups: One-to-many with MatchLineup model (CASCADE delete)
     """
 
     __tablename__ = "matches"
@@ -79,31 +80,25 @@ class Match(Base):
         comment="Match date"
     )
 
-    match_time = Column(
-        Time,
-        nullable=True,
-        comment="Match kickoff time"
-    )
-
-    is_home_match = Column(
-        Boolean,
-        nullable=False,
-        comment="Is this a home match?"
-    )
-
-    home_score = Column(
+    our_score = Column(
         Integer,
         nullable=True,
-        comment="Final home team score (NULL until match complete)"
+        comment="Our club's final score (NULL until match complete)"
     )
 
-    away_score = Column(
+    opponent_score = Column(
         Integer,
         nullable=True,
-        comment="Final away team score (NULL until match complete)"
+        comment="Opponent's final score (NULL until match complete)"
     )
 
-    # Timestamp
+    result = Column(
+        String(1),
+        nullable=True,
+        comment="Match result from our perspective: W/D/L (NULL until match complete)"
+    )
+
+    # Timestamps
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -118,6 +113,7 @@ class Match(Base):
     events = relationship("Event", back_populates="match", cascade="all, delete-orphan")
     match_statistics = relationship("MatchStatistics", back_populates="match", cascade="all, delete-orphan")
     player_match_statistics = relationship("PlayerMatchStatistics", back_populates="match", cascade="all, delete-orphan")
+    lineups = relationship("MatchLineup", back_populates="match", cascade="all, delete-orphan")
 
     # Indexes
     __table_args__ = (
