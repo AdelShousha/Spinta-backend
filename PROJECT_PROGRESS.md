@@ -513,32 +513,125 @@ python app/services/team_identifier.py
 
 ---
 
-#### Iteration 3: Match Record Creation ❌
+#### Iteration 3: Match Record Creation ✅ COMPLETED
 
-**Goal:** Create match record with our_score/opponent_score/result
+**Goal:** Create match record with score validation from StatsBomb events
 
-**Function:** `create_match_record(...) → UUID`
+**Functions:**
 
-**Input:**
-- club_id, opponent_club_id, match_date
-- our_score, opponent_score, opponent_name
+1. **Helper Function (for validation & manual testing):**
+   ```python
+   count_goals_from_events(
+       events: List[dict],
+       our_club_statsbomb_team_id: int,
+       opponent_statsbomb_team_id: int
+   ) → dict
+   ```
+
+2. **Main Function:**
+   ```python
+   create_match_record(
+       db: Session,
+       club_id: UUID,
+       opponent_club_id: UUID,
+       match_date: str,
+       our_score: int,
+       opponent_score: int,
+       opponent_name: str,
+       events: List[dict]
+   ) → UUID
+   ```
+
+**Parameter Sources:**
+- `club_id`: Query clubs table using `our_club_statsbomb_team_id` from Iteration 1
+- `opponent_club_id`: Output from `get_or_create_opponent_club()` (Iteration 2)
+- `match_date`: From request body
+- `our_score`: From request body (user input)
+- `opponent_score`: From request body (user input)
+- `opponent_name`: From request body
+- `events`: From request body (StatsBomb events array)
 
 **Output:** `match_id` (UUID)
 
 **Processing:**
-- Calculate result: 'W' if our_score > opponent_score, 'L' if <, 'D' if =
-- Insert into matches table
-- Return match_id
 
-**Tests:**
-- Test create with Win result (our_score > opponent_score)
-- Test create with Loss result (our_score < opponent_score)
-- Test create with Draw result (our_score = opponent_score)
-- Test opponent_name denormalization
+1. **Get StatsBomb Team IDs:**
+   - Query clubs table: get `statsbomb_team_id` using `club_id`
+   - Query opponent_clubs table: get `statsbomb_team_id` using `opponent_club_id`
+
+2. **Count Goals from Events (Helper Function Logic):**
+   - **IMPORTANT:** Skip penalty shootout (period 5) - match result based on regular/extra time only
+   - Filter events where `event['type']['id'] == 16` (Shot)
+   - Filter where `event['shot']['outcome']['id'] == 97` (Goal)
+   - Filter where `event['period']` is 1-4 (exclude period 5 penalty shootout)
+   - Use `event['possession_team']['id']` to determine which team scored
+   - Count goals for our_club vs opponent
+   - Return `{'our_goals': int, 'opponent_goals': int}`
+
+3. **Validate Scores:**
+   - Compare counted goals with user input (our_score, opponent_score)
+   - If mismatch: raise ValueError with clear message
+   - If match: proceed
+
+4. **Calculate Result:**
+   - 'W' if our_score > opponent_score
+   - 'D' if our_score == opponent_score
+   - 'L' if our_score < opponent_score
+
+5. **Insert Match Record:**
+   - Insert into matches table with all fields
+   - Return match_id
+
+**Example Goal Event Structure:**
+```json
+{
+  "type": {"id": 16, "name": "Shot"},
+  "possession_team": {"id": 779, "name": "Argentina"},
+  "shot": {
+    "outcome": {"id": 97, "name": "Goal"}
+  }
+}
+```
+
+**Tests:** 11 tests (all passing)
+- ✅ Test count_goals_from_events with both teams scoring
+- ✅ Test count_goals_from_events with no goals (0-0)
+- ✅ Test count_goals_from_events with only our team scoring
+- ✅ Test count_goals_from_events with only opponent scoring
+- ✅ Test count_goals_from_events with empty events array
+- ✅ Test count_goals_from_events excludes penalty shootout (period 5)
+- ✅ Test create_match_record with Win result
+- ✅ Test create_match_record with Draw result
+- ✅ Test create_match_record with Loss result
+- ✅ Test score validation error when mismatch
+- ✅ Test score validation success when match
+
+**Manual Testing:**
+Interactive CLI to test goal counting:
+```bash
+python app/services/match_service.py
+# Prompts for:
+# 1. JSON file path (default: docs/15946.json)
+# 2. Our team StatsBomb ID
+# 3. Opponent team StatsBomb ID
+# Output: Goal counts for both teams
+```
 
 **Files:**
-- `app/services/match_service.py`
-- `tests/services/test_match_service.py`
+- `app/services/match_service.py` ✅
+- `tests/services/test_match_service.py` ✅
+
+**Key Features:**
+- **Goal Validation**: Counts goals from Shot events (type 16) with Goal outcome (id 97)
+- **Penalty Shootout Exclusion**: Period 5 goals are NOT counted - match result based on regular/extra time only
+- **Score Verification**: User-provided scores must match event data exactly
+- **Automatic Result Calculation**: W/D/L based on scores
+- **Clear Error Messages**: Detailed mismatch information if validation fails
+- **Reusable Helper**: `count_goals_from_events()` can be used independently
+- **Manual Testing CLI**: Quick verification with real StatsBomb data
+
+**Important Note:**
+Penalty shootout goals (period 5) are excluded from the final score. Match results are determined by the score at the end of regular time and extra time (periods 1-4) only, as per standard football rules.
 
 ---
 
