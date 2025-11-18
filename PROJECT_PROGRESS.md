@@ -609,7 +609,7 @@ python app/services/team_identifier.py
 **Manual Testing:**
 Interactive CLI to test goal counting:
 ```bash
-python app/services/match_service.py
+python -m app.services.match_service
 # Prompts for:
 # 1. JSON file path (default: docs/15946.json)
 # 2. Our team StatsBomb ID
@@ -635,75 +635,241 @@ Penalty shootout goals (period 5) are excluded from the final score. Match resul
 
 ---
 
-#### Iteration 4: Player Extraction (Our Team) ❌
+#### Iteration 4: Player Extraction (Our Team) ✅ COMPLETED
 
-**Goal:** Create/update our players from Starting XI lineup
+**Goal:** Extract our club's players from Starting XI and create incomplete player records
 
-**Function:** `extract_our_players(lineup: List[dict], club_id: UUID) → dict`
+**Functions:**
 
-**Input:**
-- Starting XI lineup (11 players)
-- club_id
+1. **Helper Function (for parsing & manual testing):**
+   ```python
+   parse_our_lineup_from_events(
+       events: List[dict],
+       our_club_statsbomb_team_id: int
+   ) → List[dict]
+   ```
+
+2. **Main Function:**
+   ```python
+   extract_our_players(
+       db: Session,
+       club_id: UUID,
+       events: List[dict]
+   ) → dict
+   ```
+
+**Parameter Sources:**
+- `db`: Database session
+- `club_id`: Query clubs table using `our_club_statsbomb_team_id` from Iteration 1
+- `events`: StatsBomb events array from request body
 
 **Output:**
 ```python
 {
-  'player_ids': List[UUID],
-  'new_players': List[{'name': str, 'jersey': int, 'invite_code': str}]
+    'players_processed': int,  # Total (created + updated + linked)
+    'players_created': int,
+    'players_updated': int,
+    'players': [
+        {
+            'player_id': UUID,
+            'player_name': str,
+            'statsbomb_player_id': int,
+            'jersey_number': int,
+            'position': str,
+            'invite_code': str
+        },
+        # ... 11 players total
+    ]
 }
 ```
 
 **Processing:**
-- For each player in lineup:
-  - Check if exists by (club_id, statsbomb_player_id)
-  - If exists: update jersey/position
-  - Else: check by (club_id, name OR jersey)
-    - If exists: link statsbomb_player_id
-    - Else: create new player with invite code
-  - Initialize player_season_statistics if new
 
-**Tests:**
-- Test create new player with invite code
-- Test update existing by statsbomb_player_id
-- Test update existing by name/jersey
-- Test invite code format (XXX-####)
-- Test invite code uniqueness
-- Test initialize season stats
+1. **Get StatsBomb Team ID:**
+   - Query clubs table: get `statsbomb_team_id` using `club_id`
+
+2. **Find Our Team's Starting XI Event (Helper Function):**
+   - Filter events where `event['type']['id'] == 35` (Starting XI)
+   - Should find exactly 2 Starting XI events
+   - Check `event['team']['id']` to match our `statsbomb_team_id`
+   - Extract our team's Starting XI event
+
+3. **Validate and Extract Lineup:**
+   - Extract `event['tactics']['lineup']`
+   - Verify lineup has exactly 11 players
+   - If not 11: raise ValueError
+
+4. **Parse Player Data:**
+   For each player in lineup:
+   - Extract `player['player']['id']` → statsbomb_player_id
+   - Extract `player['player']['name']` → player_name
+   - Extract `player['jersey_number']` → jersey_number
+   - Extract `player['position']['name']` → position
+
+5. **Create or Update Players (Main Function):**
+   For each player:
+   - Check if exists by `(club_id, statsbomb_player_id)`
+   - **If exists and is_linked=True (linked player):**
+     - Skip update (preserve user account data)
+     - Include existing data in results
+   - **If exists and is_linked=False (incomplete player):**
+     - Update `jersey_number` if changed
+     - Update `position` if changed
+     - **Preserve** `player_name` (don't update)
+     - **Preserve** `invite_code` (critical - may be shared)
+     - Track if actually updated (for count)
+   - **If not exists (new player):**
+     - Generate unique invite_code (format: XXX-####)
+     - Create Player record with:
+       - `club_id`: from parameter
+       - `player_name`: from lineup
+       - `statsbomb_player_id`: from lineup
+       - `jersey_number`: from lineup
+       - `position`: from lineup
+       - `invite_code`: generated
+       - `is_linked`: False
+       - `user_id`: NULL (incomplete player)
+
+6. **Return Results:**
+   - Count of players processed (total)
+   - Count of players created (new)
+   - Count of players updated (incomplete only)
+   - List of player data for response
+
+**Example Starting XI Event Structure:**
+```json
+{
+  "type": {"id": 35, "name": "Starting XI"},
+  "team": {"id": 779, "name": "Argentina"},
+  "tactics": {
+    "lineup": [
+      {
+        "player": {"id": 5503, "name": "Lionel Andrés Messi Cuccittini"},
+        "position": {"id": 17, "name": "Right Wing"},
+        "jersey_number": 10
+      }
+      // ... 10 more players
+    ]
+  }
+}
+```
+
+**Tests:** 14 tests (all passing)
+
+**Helper Tests (5):**
+- ✅ Test parse_lineup extracts 11 players
+- ✅ Test parse_lineup finds correct team by team.id
+- ✅ Test parse_lineup validation error if not 11 players
+- ✅ Test parse_lineup validation error if no Starting XI events
+- ✅ Test parse_lineup validation error if team not found
+
+**Main Function Tests (9):**
+- ✅ Test extract creates 11 incomplete Player records (with new return structure)
+- ✅ Test extract generates unique invite codes with format XXX-####
+- ✅ Test extract sets all fields correctly
+- ✅ Test extract sets is_linked=False for all players
+- ✅ **NEW:** Test updates existing incomplete player (jersey/position changed)
+- ✅ **NEW:** Test preserves invite code on update (never regenerated)
+- ✅ **NEW:** Test skips linked players (is_linked=True not updated)
+- ✅ **NEW:** Test no update if same data (update count = 0)
+- ✅ **NEW:** Test mixed create and update (some new, some existing)
+
+**Manual Testing:**
+Interactive CLI to test lineup parsing:
+```bash
+python -m app.services.player_service
+# Prompts for:
+# 1. JSON file path (default: docs/15946.json)
+# 2. StatsBomb team ID
+# Output: List of 11 players with:
+#   - Player name
+#   - StatsBomb player ID
+#   - Jersey number
+#   - Position
+```
 
 **Files:**
-- `app/services/player_service.py`
-- `tests/services/test_player_service.py`
+- `app/services/player_service.py` ✅
+- `tests/services/test_player_service.py` ✅
+
+**Key Features:**
+- **Pure Processing Helper**: `parse_our_lineup_from_events()` extracts lineup without database
+- **Team Identification**: Uses `team.id` to find our team's Starting XI
+- **Update-or-Create Pattern**: Checks for existing players by `(club_id, statsbomb_player_id)`
+  - **New players**: Create with unique invite code
+  - **Incomplete players** (is_linked=False): Update jersey/position if changed
+  - **Linked players** (is_linked=True): Skip (never modify)
+- **Invite Code Preservation**: Never regenerates invite code (may be shared with player)
+- **Selective Updates**: Only updates `jersey_number` and `position` (preserves `player_name`)
+- **Invite Code Generation**: Cryptographically secure XXX-#### format (e.g., "ARG-1234")
+- **Incomplete Players**: New players created with `is_linked=False`, `user_id=NULL`
+- **Validation**: Ensures exactly 2 Starting XI events and 11 players per team
+- **Unique Codes**: Checks database to ensure invite code uniqueness
+- **Manual Testing**: Easy verification with real StatsBomb data
 
 ---
 
-#### Iteration 5: Opponent Players Extraction ❌
+#### Iteration 5: Opponent Players Extraction ✅ COMPLETED
 
-**Goal:** Create/update opponent players
+**Goal:** Create/update opponent players from Starting XI events
 
-**Function:** `extract_opponent_players(lineup: List[dict], opponent_club_id: UUID) → List[UUID]`
+**Function:** `extract_opponent_players(db: Session, opponent_club_id: UUID, events: List[dict]) → dict`
 
 **Input:**
-- Opponent Starting XI lineup
-- opponent_club_id
+- opponent_club_id (from Iteration 2)
+- events (StatsBomb events array)
 
-**Output:** List of opponent_player_ids
+**Output:**
+```python
+{
+    'players_processed': int,  # Total (created + updated)
+    'players_created': int,
+    'players_updated': int,
+    'players': [
+        {
+            'opponent_player_id': UUID,
+            'player_name': str,
+            'statsbomb_player_id': int,
+            'jersey_number': int,
+            'position': str
+        },
+        ...
+    ]
+}
+```
 
 **Processing:**
-- For each opponent player:
-  - Check if exists by (opponent_club_id, statsbomb_player_id)
-  - If not: check by (opponent_club_id, name, jersey)
-  - If exists: update jersey/position
-  - Else: create new opponent_players record
+1. Get opponent club and StatsBomb team ID
+2. Parse lineup from events using `team.id` (same logic as Iteration 4)
+3. For each opponent player:
+   - Check if exists by `(opponent_club_id, statsbomb_player_id)` **only** (not name)
+   - If exists: Update jersey/position if changed
+   - Else: Create new opponent_players record
 
-**Tests:**
-- Test create new opponent player
-- Test update existing by statsbomb_player_id
-- Test update existing by name/jersey
-- Test duplicate detection
+**Implementation Details:**
+- Reuses `parse_our_lineup_from_events()` via `parse_opponent_lineup_from_events()`
+- Update-or-create pattern (players can appear in multiple matches)
+- Only increments `players_updated` if jersey/position actually changed
+- Manual testing CLI supports both our team and opponent team parsing
+
+**Tests (6 tests):**
+- Helper: `test_extracts_11_opponent_players`, `test_finds_correct_opponent_team`
+- Main: `test_creates_new_opponent_players`, `test_updates_existing_by_statsbomb_id`, `test_no_update_if_same_data`, `test_mixed_create_and_update`
+- **Total player service tests: 15** (9 from Iteration 4 + 6 from Iteration 5)
+
+**Manual Testing:**
+```bash
+python -m app.services.player_service
+# Prompts:
+# 1. JSON file path
+# 2. Team type: (o)ur or (op)ponent
+# 3. StatsBomb team ID
+# Outputs: 11 players with name, ID, jersey, position
+```
 
 **Files:**
-- `app/services/player_service.py` (extend)
-- `tests/services/test_player_service.py` (extend)
+- `app/services/player_service.py` (extended with 2 functions)
+- `tests/services/test_player_service.py` (extended with 6 tests)
 
 ---
 
