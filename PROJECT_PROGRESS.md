@@ -414,13 +414,14 @@ Each iteration follows this workflow:
 
 #### Iteration 1: Team Identification ✅ COMPLETED
 
-**Goal:** Extract team information from StatsBomb events using fuzzy matching (pure processing logic)
+**Goal:** Extract team information from StatsBomb events with smart matching (pure processing logic)
 
-**Function:** `identify_teams(club_name: str, events: List[dict]) → dict`
+**Function:** `identify_teams(club_name: str, events: List[dict], club_statsbomb_team_id: Optional[int] = None) → dict`
 
 **Input:**
 - `club_name`: Our club's name from database
 - `events`: StatsBomb events array
+- `club_statsbomb_team_id`: Our club's StatsBomb team ID (None for first match, int for subsequent matches)
 
 **Output:**
 ```python
@@ -428,26 +429,36 @@ Each iteration follows this workflow:
   'our_club_statsbomb_team_id': int,
   'our_club_name': str,
   'opponent_statsbomb_team_id': int,
-  'opponent_name': str
+  'opponent_name': str,
+  'should_update_statsbomb_id': bool,    # True if first match
+  'new_statsbomb_team_id': int or None   # ID to save if first match
 }
 ```
 
 **Processing:**
 - Extract 2 Starting XI events (type.id = 35)
 - Validate each has exactly 11 players
-- Fuzzy match club_name to team names (exact → substring → 80% similarity)
-- Return matched team information
+- **If club_statsbomb_team_id is None (first match):**
+  - Use fuzzy matching: exact → substring → 80% similarity
+  - Return `should_update_statsbomb_id = True` and `new_statsbomb_team_id`
+- **If club_statsbomb_team_id exists (subsequent matches):**
+  - Use direct ID matching (faster and more reliable)
+  - Return `should_update_statsbomb_id = False`
 
-**Tests:** 18 tests (all passing)
+**Tests:** 24 tests (all passing)
 - 7 fuzzy matching tests
-- 5 team identification tests
+- 5 team identification tests (first match)
+- 5 subsequent match tests (direct ID matching)
 - 4 validation error tests
 - 3 end-to-end tests
 
 **Manual Testing:**
 ```bash
 python app/services/team_identifier.py
-# Interactive prompts for JSON file path and club name
+# Interactive prompts for:
+# 1. JSON file path
+# 2. Club name
+# 3. Club StatsBomb team ID (press Enter for None/first match)
 ```
 
 **Files:**
@@ -456,8 +467,9 @@ python app/services/team_identifier.py
 
 **Key Notes:**
 - Pure processing logic only (no database operations)
-- Simplified from original plan (removed first/subsequent match logic)
+- Smart matching: fuzzy for first match, direct ID for subsequent matches
 - Uses exact naming convention: our_club_*, opponent_*
+- Returns flag to indicate if database update needed
 
 ---
 

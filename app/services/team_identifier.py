@@ -56,23 +56,30 @@ def fuzzy_match_team_name(club_name: str, team_1_name: str, team_2_name: str) ->
     return None  # No match
 
 
-def identify_teams(club_name: str, events: List[dict]) -> dict:
+def identify_teams(
+    club_name: str,
+    events: List[dict],
+    club_statsbomb_team_id: Optional[int] = None
+) -> dict:
     """
     Identify our team and opponent team from Starting XI events.
 
-    Pure processing logic - extracts team information from event data using
-    fuzzy name matching. No database operations.
+    Handles both first match (fuzzy matching) and subsequent matches (direct ID matching).
+    Pure processing logic - no database operations.
 
     Args:
         club_name: Our club's name from database (e.g., "Argentina")
         events: Full StatsBomb events array
+        club_statsbomb_team_id: Our club's StatsBomb team ID (None for first match)
 
     Returns:
         {
             'our_club_statsbomb_team_id': int,
             'our_club_name': str,
             'opponent_statsbomb_team_id': int,
-            'opponent_name': str
+            'opponent_name': str,
+            'should_update_statsbomb_id': bool,
+            'new_statsbomb_team_id': int or None
         }
 
     Raises:
@@ -104,31 +111,60 @@ def identify_teams(club_name: str, events: List[dict]) -> dict:
     team_2_id = starting_xi_events[1]['team']['id']
     team_2_name = starting_xi_events[1]['team']['name']
 
-    # Step 3: Identify our team using fuzzy matching
-    matched = fuzzy_match_team_name(club_name, team_1_name, team_2_name)
+    # Step 3: Identify our team (smart matching based on whether this is first match)
+    if club_statsbomb_team_id is None:
+        # First match: Use fuzzy matching
+        matched = fuzzy_match_team_name(club_name, team_1_name, team_2_name)
 
-    if matched == 1:
-        our_club_statsbomb_team_id = team_1_id
-        our_club_name = team_1_name
-        opponent_statsbomb_team_id = team_2_id
-        opponent_name = team_2_name
-    elif matched == 2:
-        our_club_statsbomb_team_id = team_2_id
-        our_club_name = team_2_name
-        opponent_statsbomb_team_id = team_1_id
-        opponent_name = team_1_name
+        if matched == 1:
+            our_club_statsbomb_team_id = team_1_id
+            our_club_name = team_1_name
+            opponent_statsbomb_team_id = team_2_id
+            opponent_name = team_2_name
+        elif matched == 2:
+            our_club_statsbomb_team_id = team_2_id
+            our_club_name = team_2_name
+            opponent_statsbomb_team_id = team_1_id
+            opponent_name = team_1_name
+        else:
+            raise ValueError(
+                f"Cannot match your club name '{club_name}' to teams in event data: "
+                f"'{team_1_name}', '{team_2_name}'"
+            )
+
+        should_update = True
+        new_statsbomb_team_id = our_club_statsbomb_team_id
+
     else:
-        raise ValueError(
-            f"Cannot match your club name '{club_name}' to teams in event data: "
-            f"'{team_1_name}', '{team_2_name}'"
-        )
+        # Subsequent match: Use direct ID matching (faster and more reliable)
+        if club_statsbomb_team_id == team_1_id:
+            our_club_statsbomb_team_id = team_1_id
+            our_club_name = team_1_name
+            opponent_statsbomb_team_id = team_2_id
+            opponent_name = team_2_name
+        elif club_statsbomb_team_id == team_2_id:
+            our_club_statsbomb_team_id = team_2_id
+            our_club_name = team_2_name
+            opponent_statsbomb_team_id = team_1_id
+            opponent_name = team_1_name
+        else:
+            raise ValueError(
+                f"Club's statsbomb_team_id {club_statsbomb_team_id} doesn't match "
+                f"either team in events: {team_1_id} ({team_1_name}), "
+                f"{team_2_id} ({team_2_name})"
+            )
+
+        should_update = False
+        new_statsbomb_team_id = None
 
     # Return result
     return {
         'our_club_statsbomb_team_id': our_club_statsbomb_team_id,
         'our_club_name': our_club_name,
         'opponent_statsbomb_team_id': opponent_statsbomb_team_id,
-        'opponent_name': opponent_name
+        'opponent_name': opponent_name,
+        'should_update_statsbomb_id': should_update,
+        'new_statsbomb_team_id': new_statsbomb_team_id
     }
 
 
@@ -152,9 +188,19 @@ if __name__ == "__main__":
             print("Error: Club name is required")
             sys.exit(1)
 
+        statsbomb_id_input = input("Enter club StatsBomb team ID (or press Enter for None/first match): ").strip()
+        club_statsbomb_team_id = None
+        if statsbomb_id_input:
+            try:
+                club_statsbomb_team_id = int(statsbomb_id_input)
+            except ValueError:
+                print("Error: StatsBomb team ID must be an integer")
+                sys.exit(1)
+
         print("\n" + "-" * 60)
         print(f"Loading events from: {json_file_path}")
         print(f"Club name: {club_name}")
+        print(f"Club StatsBomb ID: {club_statsbomb_team_id or 'None (first match)'}")
         print("-" * 60)
 
         # Load events from file
@@ -165,7 +211,7 @@ if __name__ == "__main__":
 
         # Run function
         print("\nProcessing...")
-        result = identify_teams(club_name, events)
+        result = identify_teams(club_name, events, club_statsbomb_team_id)
 
         # Print result
         print("\n" + "=" * 60)

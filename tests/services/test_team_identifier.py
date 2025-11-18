@@ -96,7 +96,7 @@ class TestTeamIdentification:
     """Test team identification logic."""
 
     def test_exact_name_match(self):
-        """Test with exact name match."""
+        """Test with exact name match (first match)."""
         events = create_sample_events()
         result = identify_teams(
             club_name="Argentina",
@@ -107,6 +107,8 @@ class TestTeamIdentification:
         assert result['our_club_name'] == "Argentina"
         assert result['opponent_statsbomb_team_id'] == 792
         assert result['opponent_name'] == "Australia"
+        assert result['should_update_statsbomb_id'] is True
+        assert result['new_statsbomb_team_id'] == 779
 
     def test_substring_match(self):
         """Test with substring match."""
@@ -159,6 +161,92 @@ class TestTeamIdentification:
                 club_name="Brazil",
                 events=events
             )
+
+
+class TestSubsequentMatches:
+    """Test subsequent match scenarios with direct ID matching."""
+
+    def test_subsequent_match_team_1(self):
+        """Test subsequent match with direct ID match (team 1 is ours)."""
+        events = create_sample_events()
+        result = identify_teams(
+            club_name="Argentina",
+            events=events,
+            club_statsbomb_team_id=779  # Already set from first match
+        )
+
+        assert result['our_club_statsbomb_team_id'] == 779
+        assert result['our_club_name'] == "Argentina"
+        assert result['opponent_statsbomb_team_id'] == 792
+        assert result['opponent_name'] == "Australia"
+        assert result['should_update_statsbomb_id'] is False
+        assert result['new_statsbomb_team_id'] is None
+
+    def test_subsequent_match_team_2(self):
+        """Test subsequent match with direct ID match (team 2 is ours)."""
+        events = create_sample_events()
+        result = identify_teams(
+            club_name="Australia",
+            events=events,
+            club_statsbomb_team_id=792
+        )
+
+        assert result['our_club_statsbomb_team_id'] == 792
+        assert result['our_club_name'] == "Australia"
+        assert result['opponent_statsbomb_team_id'] == 779
+        assert result['opponent_name'] == "Argentina"
+        assert result['should_update_statsbomb_id'] is False
+        assert result['new_statsbomb_team_id'] is None
+
+    def test_subsequent_match_id_not_found(self):
+        """Test error when club_statsbomb_team_id doesn't match either team."""
+        events = create_sample_events()
+        with pytest.raises(ValueError, match="doesn't match either team"):
+            identify_teams(
+                club_name="Argentina",
+                events=events,
+                club_statsbomb_team_id=999  # Wrong ID
+            )
+
+    def test_subsequent_match_skips_fuzzy_matching(self):
+        """Test that subsequent matches use direct ID matching, not fuzzy matching."""
+        # Even with a completely different club name, it should match by ID
+        events = create_sample_events()
+        result = identify_teams(
+            club_name="Completely Wrong Name",  # This would fail fuzzy matching
+            events=events,
+            club_statsbomb_team_id=779  # But ID matching works
+        )
+
+        assert result['our_club_statsbomb_team_id'] == 779
+        assert result['our_club_name'] == "Argentina"  # Gets correct name from events
+        assert result['should_update_statsbomb_id'] is False
+
+    def test_first_then_subsequent_match_flow(self):
+        """Test complete flow: first match then subsequent match."""
+        events = create_sample_events()
+
+        # First match (fuzzy matching)
+        first_result = identify_teams(
+            club_name="Argentina",
+            events=events,
+            club_statsbomb_team_id=None
+        )
+
+        assert first_result['should_update_statsbomb_id'] is True
+        new_id = first_result['new_statsbomb_team_id']
+        assert new_id == 779
+
+        # Subsequent match (direct ID matching)
+        second_result = identify_teams(
+            club_name="Argentina",
+            events=events,
+            club_statsbomb_team_id=new_id  # Use ID from first match
+        )
+
+        assert second_result['should_update_statsbomb_id'] is False
+        assert second_result['new_statsbomb_team_id'] is None
+        assert second_result['our_club_statsbomb_team_id'] == 779
 
 
 class TestValidationErrors:
