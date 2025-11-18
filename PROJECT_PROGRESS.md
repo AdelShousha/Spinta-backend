@@ -473,31 +473,43 @@ python app/services/team_identifier.py
 
 ---
 
-#### Iteration 2: Opponent Club Creation ❌
+#### Iteration 2: Opponent Club Creation ✅ COMPLETED
 
 **Goal:** Get or create opponent club record
 
-**Function:** `get_or_create_opponent_club(opponent_statsbomb_team_id: int, opponent_name: str, logo_url: str) → UUID`
+**Function:** `get_or_create_opponent_club(db: Session, opponent_statsbomb_team_id: int, opponent_name: str, logo_url: Optional[str] = None) → UUID`
 
 **Input:**
+- `db`: Database session
 - `opponent_statsbomb_team_id`: StatsBomb team ID
 - `opponent_name`: Opponent name
-- `logo_url`: Opponent logo URL (optional)
+- `logo_url`: Opponent logo URL (optional, defaults to None)
 
 **Output:** `opponent_club_id` (UUID)
 
 **Processing:**
 - Check if exists by `statsbomb_team_id`
-- If not found, create new opponent_clubs record
+- If exists: update `opponent_name` and `logo_url` if changed
+- If not found: create new opponent_clubs record
 - Return `opponent_club_id`
 
-**Tests:**
+**Tests:** 6 tests (all passing)
 - Test create new opponent club
 - Test retrieve existing by statsbomb_team_id
+- Test logo_url is optional (None)
+- Test update opponent_name if changed
+- Test update logo_url if changed
+- Test multiple calls return same ID
 
 **Files:**
-- `app/services/opponent_service.py`
-- `tests/services/test_opponent_service.py`
+- `app/services/opponent_service.py` ✅
+- `tests/services/test_opponent_service.py` ✅
+
+**Key Features:**
+- Get-or-create pattern (idempotent)
+- Updates opponent_name and logo_url if StatsBomb data changes
+- Handles optional logo_url (defaults to None)
+- Returns UUID type (compatible with both PostgreSQL and SQLite)
 
 ---
 
