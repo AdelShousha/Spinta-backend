@@ -388,77 +388,592 @@ After all endpoints validated:
 
 ---
 
-### ❌ Phase 3: Admin Endpoint Processing Logic (NOT STARTED)
+### ❌ Phase 3: Match Upload Processing - Iterative TDD (NOT STARTED)
 
-**Goal:** Build data processing incrementally from raw JSON to database tables.
+**Goal:** Build StatsBomb data processing incrementally with test-driven development, ensuring each component is thoroughly tested before integration.
 
-#### Step 1: Granular Processing Logic Design
+**Approach:** 12 iterations following strict TDD methodology (Red → Green → Refactor)
 
-For each table in the final schema, document exact processing steps:
+---
 
-**Create file:** `docs/PROCESSING_LOGIC.md`
+#### Iteration Overview
 
-For each table, answer:
+Each iteration follows this workflow:
+1. **Red**: Write failing tests first
+2. **Green**: Write minimal code to pass tests
+3. **Refactor**: Clean up and optimize code
+4. **Manual Test**: Verify with sample StatsBomb data
+5. **Integrate**: Ensure compatibility with previous iterations
 
-- Which raw JSON events contain this data?
-- What filters/conditions extract the right events?
-- How to calculate/derive each field?
-- What validation rules apply?
+**Test Data:**
+- Minimal JSON samples for unit tests
+- Subsets of `docs/15946.json` for integration tests
+- Full `docs/15946.json` (~3000 events) for end-to-end test
 
-**Example:**
+---
 
-```markdown
-### Table: goals
+#### Iteration 1: Team Identification ❌
 
-#### Column: scorer_name
+**Goal:** Match club name to StatsBomb teams from Starting XI events
 
-- Source: Shot events where outcome.name == "Goal"
-- Extract: event['player']['name']
-- Validation: Must exist in lineup
+**Function:** `identify_teams(events: List[dict], club_name: str) → dict`
+
+**Input:**
+- StatsBomb events array
+- Coach's club name
+
+**Output:**
+```python
+{
+  'our_team_id': int,
+  'our_team_name': str,
+  'opponent_team_id': int,
+  'opponent_team_name': str
+}
 ```
 
-#### Step 2: Implement Processing Functions
+**Processing:**
+- Extract 2 Starting XI events
+- Validate each has exactly 11 players
+- Fuzzy match club_name to team names (exact → substring → 80% similarity)
+- Return matched team IDs
 
-Create modular processing functions:
+**Tests:**
+- Test exact match
+- Test substring match ("Thunder United FC" → "Thunder United")
+- Test fuzzy match (80% threshold)
+- Test error when no match found
+- Test error when != 2 Starting XI events
+- Test error when lineup != 11 players
+
+**Files:**
+- `app/services/team_identifier.py`
+- `tests/services/test_team_identifier.py`
+
+---
+
+#### Iteration 2: Opponent Club Creation ❌
+
+**Goal:** Get or create opponent club record
+
+**Function:** `get_or_create_opponent_club(team_id: int, name: str, logo_url: str) → UUID`
+
+**Input:**
+- StatsBomb team ID
+- Opponent name
+- Logo URL (optional)
+
+**Output:** `opponent_club_id` (UUID)
+
+**Processing:**
+- Check if exists by `statsbomb_team_id`
+- If not, check by `opponent_name`
+- If not found, create new opponent_clubs record
+- Return `opponent_club_id`
+
+**Tests:**
+- Test create new opponent club
+- Test retrieve existing by statsbomb_team_id
+- Test retrieve existing by name
+- Test update logo if changed
+
+**Files:**
+- `app/services/opponent_service.py`
+- `tests/services/test_opponent_service.py`
+
+---
+
+#### Iteration 3: Match Record Creation ❌
+
+**Goal:** Create match record with our_score/opponent_score/result
+
+**Function:** `create_match_record(...) → UUID`
+
+**Input:**
+- club_id, opponent_club_id, match_date
+- our_score, opponent_score, opponent_name
+
+**Output:** `match_id` (UUID)
+
+**Processing:**
+- Calculate result: 'W' if our_score > opponent_score, 'L' if <, 'D' if =
+- Insert into matches table
+- Return match_id
+
+**Tests:**
+- Test create with Win result (our_score > opponent_score)
+- Test create with Loss result (our_score < opponent_score)
+- Test create with Draw result (our_score = opponent_score)
+- Test opponent_name denormalization
+
+**Files:**
+- `app/services/match_service.py`
+- `tests/services/test_match_service.py`
+
+---
+
+#### Iteration 4: Player Extraction (Our Team) ❌
+
+**Goal:** Create/update our players from Starting XI lineup
+
+**Function:** `extract_our_players(lineup: List[dict], club_id: UUID) → dict`
+
+**Input:**
+- Starting XI lineup (11 players)
+- club_id
+
+**Output:**
+```python
+{
+  'player_ids': List[UUID],
+  'new_players': List[{'name': str, 'jersey': int, 'invite_code': str}]
+}
+```
+
+**Processing:**
+- For each player in lineup:
+  - Check if exists by (club_id, statsbomb_player_id)
+  - If exists: update jersey/position
+  - Else: check by (club_id, name OR jersey)
+    - If exists: link statsbomb_player_id
+    - Else: create new player with invite code
+  - Initialize player_season_statistics if new
+
+**Tests:**
+- Test create new player with invite code
+- Test update existing by statsbomb_player_id
+- Test update existing by name/jersey
+- Test invite code format (XXX-####)
+- Test invite code uniqueness
+- Test initialize season stats
+
+**Files:**
+- `app/services/player_service.py`
+- `tests/services/test_player_service.py`
+
+---
+
+#### Iteration 5: Opponent Players Extraction ❌
+
+**Goal:** Create/update opponent players
+
+**Function:** `extract_opponent_players(lineup: List[dict], opponent_club_id: UUID) → List[UUID]`
+
+**Input:**
+- Opponent Starting XI lineup
+- opponent_club_id
+
+**Output:** List of opponent_player_ids
+
+**Processing:**
+- For each opponent player:
+  - Check if exists by (opponent_club_id, statsbomb_player_id)
+  - If not: check by (opponent_club_id, name, jersey)
+  - If exists: update jersey/position
+  - Else: create new opponent_players record
+
+**Tests:**
+- Test create new opponent player
+- Test update existing by statsbomb_player_id
+- Test update existing by name/jersey
+- Test duplicate detection
+
+**Files:**
+- `app/services/player_service.py` (extend)
+- `tests/services/test_player_service.py` (extend)
+
+---
+
+#### Iteration 6: Match Lineups Creation ❌
+
+**Goal:** Create lineup entries for both teams
+
+**Function:** `create_match_lineups(match_id: UUID, our_lineup: List, opp_lineup: List) → int`
+
+**Input:**
+- match_id
+- Our team lineup data (11 players with player_ids)
+- Opponent lineup data (11 players with opponent_player_ids)
+
+**Output:** Count of lineups created (should be 22)
+
+**Processing:**
+- For each our player: insert with team_type='our_team', player_id set
+- For each opponent player: insert with team_type='opponent_team', opponent_player_id set
+- Denormalize player_name, jersey_number, position
+
+**Tests:**
+- Test create 11 our_team lineups
+- Test create 11 opponent_team lineups
+- Test denormalized fields populated
+- Test total count = 22
+
+**Files:**
+- `app/services/lineup_service.py`
+- `tests/services/test_lineup_service.py`
+
+---
+
+#### Iteration 7: Events Storage ❌
+
+**Goal:** Bulk insert ~3000 events into database
+
+**Function:** `insert_events(match_id: UUID, events: List[dict]) → int`
+
+**Input:**
+- match_id
+- Full StatsBomb events array
+
+**Output:** Count of events inserted
+
+**Processing:**
+- Batch events (500 per query for performance)
+- For each event:
+  - Extract key fields for indexing (player_id, team_id, type, minute, etc.)
+  - Store full JSON in event_data (JSONB)
+- Bulk insert
+
+**Tests:**
+- Test bulk insert performance
+- Test JSONB storage of event_data
+- Test extract key fields correctly
+- Test handle events without player (Half Start, etc.)
+- Test batch size = 500
+
+**Files:**
+- `app/services/event_service.py`
+- `tests/services/test_event_service.py`
+
+---
+
+#### Iteration 8: Goals Extraction ❌
+
+**Goal:** Extract goals from Shot events
+
+**Function:** `extract_goals(match_id: UUID, events: List[dict], our_team_name: str) → dict`
+
+**Input:**
+- match_id
+- Events array
+- our_team_name (for determining is_our_goal)
+
+**Output:**
+```python
+{
+  'goals_count': int,
+  'warnings': List[str]  # If extracted count != admin input
+}
+```
+
+**Processing:**
+- Filter Shot events where shot.outcome.name == "Goal"
+- For each goal:
+  - Extract scorer_name, minute, second
+  - Determine is_our_goal (team_name == our_team_name)
+  - Insert into goals table
+- Validate count matches admin input scores
+
+**Tests:**
+- Test filter Shot events with outcome="Goal"
+- Test extract scorer, time correctly
+- Test is_our_goal determination
+- Test warning when count mismatch
+
+**Files:**
+- `app/services/goal_service.py`
+- `tests/services/test_goal_service.py`
+
+---
+
+#### Iteration 9: Match Statistics Calculation ❌
+
+**Goal:** Calculate and store team statistics
+
+**Function:** `calculate_match_statistics(match_id: UUID, events: List[dict], teams: dict) → List[UUID]`
+
+**Input:**
+- match_id
+- Events array
+- Team names (our_team_name, opponent_team_name)
+
+**Output:** 2 statistics_ids (our_team, opponent_team)
+
+**Processing:**
+For each team:
+- Calculate possession % (sum event durations / total)
+- Sum xG (shot.statsbomb_xg)
+- Count shots (total, on target, off target)
+- Count goalkeeper saves (opponent shots with outcome="Saved")
+- Calculate pass statistics (total, completed, completion %)
+- Count passes in final third (location[0] > 80)
+- Count long passes (length > 30)
+- Count crosses
+- Calculate dribble statistics
+- Calculate tackle statistics
+- Count interceptions
+- Count ball recoveries
+- Insert match_statistics record
+
+**Tests:**
+- Test possession calculation
+- Test xG summation
+- Test shots counting by outcome
+- Test pass statistics
+- Test defensive statistics
+- Test create 2 records (our_team, opponent_team)
+
+**Files:**
+- `app/services/match_stats_service.py`
+- `tests/services/test_match_stats_service.py`
+
+---
+
+#### Iteration 10: Player Match Statistics ❌
+
+**Goal:** Calculate per-player statistics
+
+**Function:** `calculate_player_match_statistics(match_id: UUID, events: List[dict], players: List[dict]) → int`
+
+**Input:**
+- match_id
+- Events array
+- Our players (with player_id and statsbomb_player_id mapping)
+
+**Output:** Count of player_match_statistics records created
+
+**Processing:**
+For each player:
+- Filter events by statsbomb_player_id
+- Count goals (Shot + outcome="Goal")
+- Count assists (Pass + goal_assist=true)
+- Sum xG
+- Calculate shot statistics
+- Calculate pass statistics
+- Calculate dribble statistics
+- Calculate defensive statistics
+- Insert player_match_statistics record
+
+**Tests:**
+- Test goals counting per player
+- Test assists counting
+- Test xG per player
+- Test all statistics calculations
+- Test record per player in lineup
+
+**Files:**
+- `app/services/player_stats_service.py`
+- `tests/services/test_player_stats_service.py`
+
+---
+
+#### Iteration 11: Club Season Statistics Update ❌
+
+**Goal:** Recalculate club season aggregates
+
+**Function:** `update_club_season_statistics(club_id: UUID) → UUID`
+
+**Input:** club_id
+
+**Output:** club_stats_id
+
+**Processing:**
+- Aggregate all matches for club
+- Count wins/draws/losses from matches.result
+- Sum goals_scored/goals_conceded
+- Sum assists from player_match_statistics
+- Count clean_sheets (opponent_score = 0)
+- Calculate team_form (last 5 results, most recent first: "WWDLW")
+- Calculate averages from match_statistics (team_type='our_team')
+- Update club_season_statistics record
+
+**Tests:**
+- Test aggregate wins/draws/losses
+- Test goals totals
+- Test assists summation
+- Test clean sheets
+- Test team_form calculation
+- Test averages calculation
+
+**Files:**
+- `app/services/season_stats_service.py`
+- `tests/services/test_season_stats_service.py`
+
+---
+
+#### Iteration 12: Player Season Statistics Update ❌
+
+**Goal:** Recalculate player season aggregates
+
+**Function:** `update_player_season_statistics(player_ids: List[UUID]) → int`
+
+**Input:** List of player_ids
+
+**Output:** Count of players updated
+
+**Processing:**
+For each player:
+- Aggregate all player_match_statistics
+- Count matches_played
+- Sum goals, assists, xG
+- Calculate per-game averages
+- Sum totals (passes, dribbles, tackles, etc.)
+- Calculate success rates
+- Calculate attribute ratings (attacking, technique, tactical, defending, creativity)
+- Update player_season_statistics record
+
+**Tests:**
+- Test aggregate statistics
+- Test per-game calculations
+- Test attribute rating formulas
+- Test update existing records
+
+**Files:**
+- `app/services/season_stats_service.py` (extend)
+- `tests/services/test_season_stats_service.py` (extend)
+
+---
+
+#### Final Integration: Match Processor ❌
+
+**Goal:** Orchestrate all iterations into single transaction
+
+**Function:** `process_match_upload(coach_id: UUID, match_data: dict) → dict`
+
+**Input:**
+- coach_id (from JWT)
+- match_data (opponent_name, match_date, our_score, opponent_score, statsbomb_events)
+
+**Output:**
+```python
+{
+  'success': bool,
+  'match_id': UUID,
+  'summary': {
+    'events_processed': int,
+    'goals_extracted': int,
+    'players_created': int,
+    'players_updated': int,
+    'lineups_created': int,
+    'warnings': List[str]
+  },
+  'new_players': List[dict]
+}
+```
+
+**Processing:**
+1. Authenticate coach and get club_id
+2. Identify teams (Iteration 1)
+3. Get/create opponent club (Iteration 2)
+4. Create match record (Iteration 3)
+5. Extract our players (Iteration 4)
+6. Extract opponent players (Iteration 5)
+7. Create match lineups (Iteration 6)
+8. Insert events (Iteration 7)
+9. Extract goals (Iteration 8)
+10. Calculate match statistics (Iteration 9)
+11. Calculate player statistics (Iteration 10)
+12. Update club season stats (Iteration 11)
+13. Update player season stats (Iteration 12)
+
+All wrapped in database transaction (rollback on any error)
+
+**Tests:**
+- Integration test with sample data subset
+- End-to-end test with full 15946.json
+- Test transaction rollback on error
+- Test all summary fields populated
+
+**Files:**
+- `app/services/match_processor.py`
+- `tests/services/test_match_processor.py`
+- `tests/test_admin_endpoint.py`
+
+---
+
+#### Admin Endpoint Implementation ❌
+
+**Goal:** Create POST /api/coach/matches endpoint
+
+**Route:** `POST /api/coach/matches`
+
+**Handler:**
+```python
+@router.post("/matches")
+async def upload_match(
+    match_data: MatchUploadRequest,
+    current_user = Depends(get_current_coach)
+):
+    result = process_match_upload(current_user.coach_id, match_data.dict())
+    return result
+```
+
+**Files:**
+- `app/api/routes/admin.py`
+- `app/schemas/admin.py`
+
+---
+
+#### File Structure
 
 ```
 app/services/
-├── match_processor.py       # Main orchestrator
-├── team_identifier.py       # Team matching logic
-├── player_extractor.py      # Player creation logic
-├── goal_extractor.py        # Goal extraction logic
-├── statistics_calculator.py # Stats calculation
-└── event_processor.py       # Event storage
+├── __init__.py
+├── team_identifier.py          # Iteration 1
+├── opponent_service.py          # Iteration 2
+├── match_service.py             # Iteration 3
+├── player_service.py            # Iterations 4-5
+├── lineup_service.py            # Iteration 6
+├── event_service.py             # Iteration 7
+├── goal_service.py              # Iteration 8
+├── match_stats_service.py       # Iteration 9
+├── player_stats_service.py      # Iteration 10
+├── season_stats_service.py      # Iterations 11-12
+└── match_processor.py           # Final integration
+
+tests/services/
+├── __init__.py
+├── test_team_identifier.py      # Unit tests for each service
+├── test_opponent_service.py
+├── test_match_service.py
+├── test_player_service.py
+├── test_lineup_service.py
+├── test_event_service.py
+├── test_goal_service.py
+├── test_match_stats_service.py
+├── test_player_stats_service.py
+├── test_season_stats_service.py
+└── test_match_processor.py      # Integration tests
+
+app/api/routes/
+└── admin.py                     # Endpoint implementation
+
+app/schemas/
+└── admin.py                     # Request/response schemas
+
+tests/
+└── test_admin_endpoint.py       # End-to-end test
 ```
 
-#### Step 3: Consolidate into Main Processor
+---
 
-Create `app/services/match_processor.py` that:
+**Benefits of Iterative TDD Approach:**
 
-- Orchestrates all extraction functions
-- Handles transaction management
-- Returns processing summary
+1. **Incremental Progress**: 12 clear milestones, each independently testable
+2. **Early Validation**: Catch errors at smallest scope before integration
+3. **Refactoring Safety**: Tests prevent regressions when improving code
+4. **Clear Dependencies**: Each iteration builds on tested, working code
+5. **Easier Debugging**: Isolated failures with clear boundaries
+6. **Living Documentation**: Tests serve as usage examples
+7. **Confidence**: Every feature proven correct before moving forward
+8. **Manual Testing**: Verify with real data after each iteration
 
-#### Step 4: Integrate with Admin Endpoint
+**Testing Pyramid:**
+- **Unit Tests**: Fast, isolated tests for each service function
+- **Integration Tests**: Combine related services (e.g., Iterations 1-3)
+- **End-to-End Test**: Full match upload with 15946.json (~3000 events)
 
-Create POST /api/coach/matches route that:
-
-- Validates request
-- Calls match processor
-- Returns response
-
-#### Step 5: Test with Real Data
-
-- Test with `docs/15946.json`
-- Verify all tables populated correctly
-- Validate calculations
-
-**Key Deliverables:**
-
-- `docs/PROCESSING_LOGIC.md` - Detailed processing documentation
-- `app/services/` - All processing functions
-- `app/api/routes/admin.py` - Admin endpoint implementation
-- `tests/test_admin_match_upload.py` - Integration tests
+**Implementation Order:**
+Complete Iterations 1-12 sequentially, ensuring all tests pass before proceeding to next iteration
 
 ---
 

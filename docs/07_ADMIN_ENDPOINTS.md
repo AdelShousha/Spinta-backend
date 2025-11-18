@@ -22,8 +22,6 @@ All endpoints require:
 
 **Authentication:** Required (Coach only)
 
-**TODO:** Update this endpoint for new matches schema. Must calculate and store `our_score`, `opponent_score`, and `result` fields (instead of `home_score`, `away_score`, `is_home_match`). Do not store `match_time`. Must also update `team_form` in club_season_statistics after each match.
-
 **Request:**
 ```json
 POST /api/coach/matches HTTP/1.1
@@ -35,10 +33,8 @@ Content-Type: application/json
   "opponent_name": "City Strikers",
   "opponent_logo_url": "https://storage.example.com/opponents/city-strikers.png",
   "match_date": "2025-10-08",
-  "match_time": "15:30:00",
-  "is_home_match": true,
-  "home_score": 3,
-  "away_score": 2,
+  "our_score": 3,
+  "opponent_score": 2,
   "statsbomb_events": [
     {
       "id": "a3f7e8c2-1234-5678-9abc-def012345678",
@@ -259,10 +255,8 @@ Content-Type: application/json
 | `opponent_name` | String | Yes | Opponent team name (2-255 chars) |
 | `opponent_logo_url` | String (URL) | No | Opponent team logo URL |
 | `match_date` | Date (YYYY-MM-DD) | Yes | Match date |
-| `match_time` | Time (HH:MM:SS) | Yes | Match kickoff time |
-| `is_home_match` | Boolean | Yes | true = home match, false = away match |
-| `home_score` | Integer | Yes | Final score for home team |
-| `away_score` | Integer | Yes | Final score for away team |
+| `our_score` | Integer | Yes | Our club's final score |
+| `opponent_score` | Integer | Yes | Opponent's final score |
 | `statsbomb_events` | Array | Yes | Full StatsBomb event data (typically ~3000 events) |
 
 **StatsBomb Events Array:**
@@ -396,6 +390,16 @@ INSERT INTO opponent_clubs (
 
 ### Step 4: Create Match Record
 
+```python
+# Calculate match result from our club's perspective
+if our_score > opponent_score:
+    result = 'W'  # Win
+elif our_score < opponent_score:
+    result = 'L'  # Loss
+else:
+    result = 'D'  # Draw
+```
+
 ```sql
 INSERT INTO matches (
   match_id,
@@ -403,23 +407,19 @@ INSERT INTO matches (
   opponent_club_id,
   opponent_name,
   match_date,
-  match_time,
-  is_home_match,
-  home_score,
-  away_score,
-  created_at,
-  updated_at
+  our_score,
+  opponent_score,
+  result,
+  created_at
 ) VALUES (
   gen_random_uuid(),
   :club_id,
   :opponent_club_id,
   :opponent_name,
   :match_date,
-  :match_time,
-  :is_home_match,
-  :home_score,
-  :away_score,
-  NOW(),
+  :our_score,
+  :opponent_score,
+  :result,
   NOW()
 ) RETURNING match_id;
 ```
@@ -471,42 +471,26 @@ goal_events = [e for e in statsbomb_events
                if e['type']['name'] == 'Shot'
                and e.get('shot', {}).get('outcome', {}).get('name') == 'Goal']
 
-# Find assist for each goal using key_pass_id reference
+# Create goal records
 for goal_event in goal_events:
-    # Check if the goal has an associated assist pass
-    key_pass_id = goal_event.get('shot', {}).get('key_pass_id')
-
-    assist_name = None
-    if key_pass_id:
-        # Find the Pass event with this specific ID
-        assist_event = next((e for e in statsbomb_events if e['id'] == key_pass_id), None)
-
-        if assist_event and assist_event.get('pass', {}).get('goal_assist'):
-            assist_name = assist_event['player']['name']
+    # Determine if goal is ours or opponent's
+    is_our_goal = (goal_event['team']['name'] == our_team_name)
 
     INSERT INTO goals (
       goal_id,
       match_id,
-      team_name,
       scorer_name,
-      assist_name,
       minute,
       second,
-      period,
-      goal_type,  -- e.g., "Open Play", "Penalty", "Free Kick"
-      body_part,   -- e.g., "Right Foot", "Left Foot", "Head"
+      is_our_goal,
       created_at
     ) VALUES (
       gen_random_uuid(),
       :match_id,
-      goal_event['team']['name'],
       goal_event['player']['name'],
-      assist_name,
       goal_event['minute'],
       goal_event['second'],
-      goal_event['period'],
-      goal_event['shot']['type']['name'],
-      goal_event['shot']['body_part']['name'],
+      is_our_goal,
       NOW()
     );
 ```
@@ -514,25 +498,21 @@ for goal_event in goal_events:
 **Goal Validation:**
 ```python
 # Count goals from events
-our_goals_from_json = count(goals where team_name == our_team_name)
-opponent_goals_from_json = count(goals where team_name == opponent_team_name)
+our_goals_from_json = count(goals where is_our_goal == True)
+opponent_goals_from_json = count(goals where is_our_goal == False)
 
 # Compare with admin's input
-if is_home_match:
-    our_score_input = home_score
-    opponent_score_input = away_score
-else:
-    our_score_input = away_score
-    opponent_score_input = home_score
+our_score_input = our_score
+opponent_score_input = opponent_score
 
 warnings = []
 if our_goals_from_json != our_score_input:
-    warnings.append(f"Event data has {our_goals_from_json} goals for your team but score says {our_score_input}")
+    warnings.append(f"Event data has {our_goals_from_json} goals for your team but our_score says {our_score_input}")
 
 if opponent_goals_from_json != opponent_score_input:
-    warnings.append(f"Event data has {opponent_goals_from_json} goals for opponent but score says {opponent_score_input}")
+    warnings.append(f"Event data has {opponent_goals_from_json} goals for opponent but opponent_score says {opponent_score_input}")
 
-# Always use admin's input scores (home_score, away_score) as source of truth
+# Always use admin's input scores (our_score, opponent_score) as source of truth
 ```
 
 ---
@@ -655,6 +635,96 @@ def generate_invite_code(player_name):
         if not exists:
             return code
 ```
+
+---
+
+### Step 7.5: Create Match Lineups
+
+**Concept:** Store lineup information in dedicated table for both teams (simplifies lineup queries).
+
+```python
+# Create lineup entries for our team
+our_starting_xi = [e for e in statsbomb_events
+                   if e['type']['name'] == 'Starting XI'
+                   and e['team']['name'] == our_team_name][0]
+
+for player_data in our_starting_xi['tactics']['lineup']:
+    statsbomb_player_id = player_data['player']['id']
+    player_name = player_data['player']['name']
+    jersey_number = player_data['jersey_number']
+    position = player_data['position']['name']
+
+    # Get player_id from players table
+    player_id = SELECT player_id FROM players
+                WHERE club_id = :club_id
+                AND statsbomb_player_id = :statsbomb_player_id;
+
+    INSERT INTO match_lineups (
+      lineup_id,
+      match_id,
+      team_type,
+      player_id,
+      opponent_player_id,
+      player_name,
+      jersey_number,
+      position,
+      created_at
+    ) VALUES (
+      gen_random_uuid(),
+      :match_id,
+      'our_team',
+      player_id,
+      NULL,
+      player_name,
+      jersey_number,
+      position,
+      NOW()
+    );
+
+# Create lineup entries for opponent team
+opponent_starting_xi = [e for e in statsbomb_events
+                        if e['type']['name'] == 'Starting XI'
+                        and e['team']['name'] == opponent_team_name][0]
+
+for player_data in opponent_starting_xi['tactics']['lineup']:
+    statsbomb_player_id = player_data['player']['id']
+    player_name = player_data['player']['name']
+    jersey_number = player_data['jersey_number']
+    position = player_data['position']['name']
+
+    # Get opponent_player_id from opponent_players table
+    opponent_player_id = SELECT opponent_player_id FROM opponent_players
+                         WHERE opponent_club_id = :opponent_club_id
+                         AND statsbomb_player_id = :statsbomb_player_id;
+
+    INSERT INTO match_lineups (
+      lineup_id,
+      match_id,
+      team_type,
+      player_id,
+      opponent_player_id,
+      player_name,
+      jersey_number,
+      position,
+      created_at
+    ) VALUES (
+      gen_random_uuid(),
+      :match_id,
+      'opponent_team',
+      NULL,
+      opponent_player_id,
+      player_name,
+      jersey_number,
+      position,
+      NOW()
+    );
+```
+
+**Notes:**
+- Simplifies lineup queries - no need to filter Starting XI events
+- For our_team: `player_id` is set, `opponent_player_id` is NULL
+- For opponent_team: `opponent_player_id` is set, `player_id` is NULL
+- Player information is denormalized for faster queries
 
 ---
 
@@ -868,6 +938,19 @@ for player in our_lineup:
 # Recalculate club season statistics from all matches
 club_stats = aggregate_club_stats(club_id)
 
+# Calculate team form (last 5 match results, most recent first)
+recent_matches = SELECT result FROM matches
+                 WHERE club_id = :club_id
+                 ORDER BY match_date DESC, created_at DESC
+                 LIMIT 5;
+
+team_form = ''.join([m.result for m in recent_matches]) if len(recent_matches) > 0 else None
+
+# Calculate total assists from player match statistics
+total_assists = SELECT SUM(assists) FROM player_match_statistics pms
+                JOIN players p ON pms.player_id = p.player_id
+                WHERE p.club_id = :club_id;
+
 UPDATE club_season_statistics SET
   matches_played = club_stats['matches_played'],
   wins = club_stats['wins'],
@@ -875,7 +958,9 @@ UPDATE club_season_statistics SET
   losses = club_stats['losses'],
   goals_scored = club_stats['goals_scored'],
   goals_conceded = club_stats['goals_conceded'],
+  total_assists = total_assists,
   total_clean_sheets = club_stats['clean_sheets'],
+  team_form = team_form,
   avg_goals_per_match = club_stats['goals_scored'] / club_stats['matches_played'],
   avg_possession_percentage = AVG(possession_percentage from match_statistics),
   avg_total_shots = AVG(total_shots),
@@ -956,6 +1041,7 @@ def calculate_technique_rating(stats):
     "players_created": 3,
     "players_updated": 8,
     "opponent_players_created": 11,
+    "lineups_created": 22,
     "warnings": [
       "Event data has 3 goals for your team but score says 3 (match)",
       "Event data has 2 goals for opponent but score says 2 (match)"
@@ -988,6 +1074,7 @@ def calculate_technique_rating(stats):
 | `summary.players_created` | Integer | Number of new player records created |
 | `summary.players_updated` | Integer | Number of existing players updated |
 | `summary.opponent_players_created` | Integer | Number of opponent players created |
+| `summary.lineups_created` | Integer | Number of lineup entries created (11 our team + 11 opponent) |
 | `summary.warnings` | Array of Strings | Any validation warnings |
 | `new_players` | Array | List of newly created players with invite codes |
 
@@ -1130,15 +1217,16 @@ The following events are **not processed** in the current version:
 1. ✅ Authenticate coach and get club
 2. ✅ Identify teams from JSON (match club name to StatsBomb team)
 3. ✅ Create/get opponent club
-4. ✅ Create match record
+4. ✅ Create match record (with our_score, opponent_score, result)
 5. ✅ Insert all events (~3000 records)
-6. ✅ Extract and create goals
+6. ✅ Extract and create goals (with is_our_goal flag)
 7. ✅ Extract and create/update players (your club)
-8. ✅ Extract and create opponent players
-9. ✅ Calculate and store match statistics (both teams)
-10. ✅ Calculate and store player match statistics
-11. ✅ Update club season statistics
-12. ✅ Update player season statistics
+8. ✅ Create match lineups (both our team and opponent)
+9. ✅ Extract and create opponent players
+10. ✅ Calculate and store match statistics (both teams)
+11. ✅ Calculate and store player match statistics
+12. ✅ Update club season statistics (including team_form and total_assists)
+13. ✅ Update player season statistics
 
 ### Key Features
 
