@@ -1,13 +1,11 @@
 """
-Tests for team identification and opponent club handling service.
+Tests for team identification service.
 """
 
 import pytest
-from uuid import UUID
 from app.services.team_identifier import (
     fuzzy_match_team_name,
-    get_or_create_opponent_club,
-    identify_teams_and_opponent
+    identify_teams
 )
 
 
@@ -95,43 +93,36 @@ class TestFuzzyMatching:
 
 
 class TestTeamIdentification:
-    """Test team identification logic for first and subsequent matches."""
+    """Test team identification logic."""
 
-    def test_first_match_exact_name(self):
-        """Test first match with exact name match."""
+    def test_exact_name_match(self):
+        """Test with exact name match."""
         events = create_sample_events()
-        result = identify_teams_and_opponent(
+        result = identify_teams(
             club_name="Argentina",
-            club_statsbomb_team_id=None,
-            events=events,
-            opponent_name="Australia",
-            opponent_logo_url="https://example.com/australia.png"
+            events=events
         )
 
-        assert result['our_team_id'] == 779
-        assert result['our_team_name'] == "Argentina"
-        assert result['opponent_team_id'] == 792
-        assert result['opponent_team_name'] == "Australia"
-        assert result['should_update_club_statsbomb_id'] is True
-        assert result['new_statsbomb_team_id'] == 779
+        assert result['our_club_statsbomb_team_id'] == 779
+        assert result['our_club_name'] == "Argentina"
+        assert result['opponent_statsbomb_team_id'] == 792
+        assert result['opponent_name'] == "Australia"
 
-    def test_first_match_substring(self):
-        """Test first match with substring match."""
+    def test_substring_match(self):
+        """Test with substring match."""
         events = create_sample_events(team_1_name="Argentina FC")
-        result = identify_teams_and_opponent(
+        result = identify_teams(
             club_name="Argentina",
-            club_statsbomb_team_id=None,
-            events=events,
-            opponent_name="Australia",
-            opponent_logo_url="https://example.com/australia.png"
+            events=events
         )
 
-        assert result['our_team_id'] == 779
-        assert result['our_team_name'] == "Argentina FC"
-        assert result['should_update_club_statsbomb_id'] is True
+        assert result['our_club_statsbomb_team_id'] == 779
+        assert result['our_club_name'] == "Argentina FC"
+        assert result['opponent_statsbomb_team_id'] == 792
+        assert result['opponent_name'] == "Australia"
 
-    def test_first_match_fuzzy_80_percent(self):
-        """Test first match with fuzzy match at 80% threshold."""
+    def test_fuzzy_match_80_percent(self):
+        """Test with fuzzy match at 80% threshold."""
         # "Thunder United" vs "Thunder Utd" has ~85% similarity
         events = create_sample_events(
             team_1_id=779,
@@ -139,89 +130,34 @@ class TestTeamIdentification:
             team_2_id=792,
             team_2_name="Australia"
         )
-        result = identify_teams_and_opponent(
+        result = identify_teams(
             club_name="Thunder United",
-            club_statsbomb_team_id=None,
-            events=events,
-            opponent_name="Australia",
-            opponent_logo_url="https://example.com/australia.png"
+            events=events
         )
 
-        assert result['our_team_id'] == 779
-        assert result['our_team_name'] == "Thunder Utd"
-        assert result['should_update_club_statsbomb_id'] is True
+        assert result['our_club_statsbomb_team_id'] == 779
+        assert result['our_club_name'] == "Thunder Utd"
 
-    def test_first_match_team_2_is_ours(self):
-        """Test first match when our team is the second Starting XI event."""
+    def test_team_2_is_ours(self):
+        """Test when our team is the second Starting XI event."""
         events = create_sample_events()
-        result = identify_teams_and_opponent(
+        result = identify_teams(
             club_name="Australia",
-            club_statsbomb_team_id=None,
-            events=events,
-            opponent_name="Argentina",
-            opponent_logo_url="https://example.com/argentina.png"
+            events=events
         )
 
-        assert result['our_team_id'] == 792
-        assert result['our_team_name'] == "Australia"
-        assert result['opponent_team_id'] == 779
-        assert result['opponent_team_name'] == "Argentina"
+        assert result['our_club_statsbomb_team_id'] == 792
+        assert result['our_club_name'] == "Australia"
+        assert result['opponent_statsbomb_team_id'] == 779
+        assert result['opponent_name'] == "Argentina"
 
-    def test_first_match_no_match_error(self):
+    def test_no_match_error(self):
         """Test error when club name doesn't match either team."""
         events = create_sample_events()
         with pytest.raises(ValueError, match="Cannot match your club name"):
-            identify_teams_and_opponent(
+            identify_teams(
                 club_name="Brazil",
-                club_statsbomb_team_id=None,
-                events=events,
-                opponent_name="Australia",
-                opponent_logo_url="https://example.com/australia.png"
-            )
-
-    def test_subsequent_match_direct_id_match_team_1(self):
-        """Test subsequent match with direct StatsBomb team ID match (team 1)."""
-        events = create_sample_events()
-        result = identify_teams_and_opponent(
-            club_name="Argentina",
-            club_statsbomb_team_id=779,  # Already set from first match
-            events=events,
-            opponent_name="Australia",
-            opponent_logo_url="https://example.com/australia.png"
-        )
-
-        assert result['our_team_id'] == 779
-        assert result['our_team_name'] == "Argentina"
-        assert result['opponent_team_id'] == 792
-        assert result['should_update_club_statsbomb_id'] is False
-        assert result['new_statsbomb_team_id'] is None
-
-    def test_subsequent_match_direct_id_match_team_2(self):
-        """Test subsequent match with direct StatsBomb team ID match (team 2)."""
-        events = create_sample_events()
-        result = identify_teams_and_opponent(
-            club_name="Australia",
-            club_statsbomb_team_id=792,
-            events=events,
-            opponent_name="Argentina",
-            opponent_logo_url="https://example.com/argentina.png"
-        )
-
-        assert result['our_team_id'] == 792
-        assert result['our_team_name'] == "Australia"
-        assert result['opponent_team_id'] == 779
-        assert result['should_update_club_statsbomb_id'] is False
-
-    def test_subsequent_match_id_not_found_error(self):
-        """Test error when club's statsbomb_team_id doesn't match either team."""
-        events = create_sample_events()
-        with pytest.raises(ValueError, match="doesn't match either team"):
-            identify_teams_and_opponent(
-                club_name="Argentina",
-                club_statsbomb_team_id=999,  # Wrong ID
-                events=events,
-                opponent_name="Australia",
-                opponent_logo_url="https://example.com/australia.png"
+                events=events
             )
 
 
@@ -234,12 +170,9 @@ class TestValidationErrors:
         events = [create_starting_xi_event(779, "Argentina")]
 
         with pytest.raises(ValueError, match="Expected 2 Starting XI events, found 1"):
-            identify_teams_and_opponent(
+            identify_teams(
                 club_name="Argentina",
-                club_statsbomb_team_id=None,
-                events=events,
-                opponent_name="Australia",
-                opponent_logo_url="https://example.com/australia.png"
+                events=events
             )
 
     def test_error_three_starting_xi(self):
@@ -251,12 +184,9 @@ class TestValidationErrors:
         ]
 
         with pytest.raises(ValueError, match="Expected 2 Starting XI events, found 3"):
-            identify_teams_and_opponent(
+            identify_teams(
                 club_name="Argentina",
-                club_statsbomb_team_id=None,
-                events=events,
-                opponent_name="Australia",
-                opponent_logo_url="https://example.com/australia.png"
+                events=events
             )
 
     def test_error_lineup_not_11_players(self):
@@ -267,12 +197,9 @@ class TestValidationErrors:
         ]
 
         with pytest.raises(ValueError, match="has 10 players \\(expected 11\\)"):
-            identify_teams_and_opponent(
+            identify_teams(
                 club_name="Argentina",
-                club_statsbomb_team_id=None,
-                events=events,
-                opponent_name="Australia",
-                opponent_logo_url="https://example.com/australia.png"
+                events=events
             )
 
     def test_error_both_lineups_wrong(self):
@@ -283,99 +210,14 @@ class TestValidationErrors:
         ]
 
         with pytest.raises(ValueError, match="expected 11"):
-            identify_teams_and_opponent(
+            identify_teams(
                 club_name="Argentina",
-                club_statsbomb_team_id=None,
-                events=events,
-                opponent_name="Australia",
-                opponent_logo_url="https://example.com/australia.png"
+                events=events
             )
 
 
-class TestOpponentClubHandling:
-    """Test opponent club get/create logic."""
-
-    def test_get_existing_opponent_by_id(self):
-        """Test retrieving existing opponent club by StatsBomb team ID."""
-        existing_uuid = UUID('12345678-1234-5678-1234-567812345678')
-        existing_opponents = [
-            {
-                'opponent_club_id': existing_uuid,
-                'statsbomb_team_id': 792,
-                'opponent_name': 'Australia',
-                'logo_url': 'https://old-url.com/logo.png'
-            }
-        ]
-
-        result = get_or_create_opponent_club(
-            statsbomb_team_id=792,
-            opponent_name="Australia Updated",
-            opponent_logo_url="https://new-url.com/logo.png",
-            existing_opponents=existing_opponents
-        )
-
-        assert result['opponent_club_id'] == existing_uuid
-        assert result['statsbomb_team_id'] == 792
-        assert result['is_new'] is False
-        # Should return existing data, not new data from request
-        assert result['opponent_name'] == 'Australia'
-        assert result['logo_url'] == 'https://old-url.com/logo.png'
-
-    def test_create_new_opponent(self):
-        """Test creating new opponent club when not found."""
-        result = get_or_create_opponent_club(
-            statsbomb_team_id=792,
-            opponent_name="Australia",
-            opponent_logo_url="https://example.com/australia.png",
-            existing_opponents=[]
-        )
-
-        assert isinstance(result['opponent_club_id'], UUID)
-        assert result['statsbomb_team_id'] == 792
-        assert result['is_new'] is True
-        # Should use data from request body
-        assert result['opponent_name'] == "Australia"
-        assert result['logo_url'] == "https://example.com/australia.png"
-
-    def test_uses_request_body_data_for_new_opponent(self):
-        """Test that opponent_name and logo_url from request body are used when creating."""
-        result = get_or_create_opponent_club(
-            statsbomb_team_id=800,
-            opponent_name="Brazil National Team",
-            opponent_logo_url="https://example.com/brazil-logo.png",
-            existing_opponents=None
-        )
-
-        assert result['opponent_name'] == "Brazil National Team"
-        assert result['logo_url'] == "https://example.com/brazil-logo.png"
-        assert result['is_new'] is True
-
-    def test_match_only_by_id_not_name(self):
-        """Test that matching uses ONLY statsbomb_team_id, not opponent_name."""
-        existing_uuid = UUID('12345678-1234-5678-1234-567812345678')
-        existing_opponents = [
-            {
-                'opponent_club_id': existing_uuid,
-                'statsbomb_team_id': 792,
-                'opponent_name': 'Australia Old Name',
-                'logo_url': 'https://old.com/logo.png'
-            }
-        ]
-
-        # Same ID, different name - should still match
-        result = get_or_create_opponent_club(
-            statsbomb_team_id=792,
-            opponent_name="Completely Different Name",
-            opponent_logo_url="https://new.com/logo.png",
-            existing_opponents=existing_opponents
-        )
-
-        assert result['opponent_club_id'] == existing_uuid
-        assert result['is_new'] is False
-
-
 class TestEndToEnd:
-    """End-to-end tests with real StatsBomb data structure."""
+    """End-to-end tests with realistic StatsBomb data structure."""
 
     def test_with_real_statsbomb_data(self):
         """Test with realistic StatsBomb event structure."""
@@ -459,50 +301,56 @@ class TestEndToEnd:
             }
         ]
 
-        result = identify_teams_and_opponent(
+        result = identify_teams(
             club_name="Argentina",
-            club_statsbomb_team_id=None,
-            events=events,
-            opponent_name="Australia",
-            opponent_logo_url="https://example.com/australia.png"
+            events=events
         )
 
-        assert result['our_team_id'] == 779
-        assert result['our_team_name'] == "Argentina"
-        assert result['opponent_team_id'] == 792
-        assert result['opponent_team_name'] == "Australia"
-        assert isinstance(result['opponent_club_id'], UUID)
-        assert result['should_update_club_statsbomb_id'] is True
-        assert result['new_statsbomb_team_id'] == 779
+        assert result['our_club_statsbomb_team_id'] == 779
+        assert result['our_club_name'] == "Argentina"
+        assert result['opponent_statsbomb_team_id'] == 792
+        assert result['opponent_name'] == "Australia"
 
-    def test_complete_flow_first_then_subsequent_match(self):
-        """Test complete flow: first match then subsequent match."""
+    def test_case_insensitive_matching(self):
+        """Test that matching is case-insensitive."""
         events = create_sample_events()
 
-        # First match
-        first_result = identify_teams_and_opponent(
-            club_name="Argentina",
-            club_statsbomb_team_id=None,
-            events=events,
-            opponent_name="Australia",
-            opponent_logo_url="https://example.com/australia.png"
+        # lowercase club name
+        result = identify_teams(
+            club_name="argentina",
+            events=events
         )
 
-        assert first_result['should_update_club_statsbomb_id'] is True
-        new_statsbomb_id = first_result['new_statsbomb_team_id']
-        assert new_statsbomb_id == 779
+        assert result['our_club_statsbomb_team_id'] == 779
+        assert result['our_club_name'] == "Argentina"
 
-        # Simulate updating database with new_statsbomb_team_id
-        # Now run subsequent match with the ID set
-        second_result = identify_teams_and_opponent(
+    def test_with_extra_events(self):
+        """Test that function ignores non-Starting XI events."""
+        events = [
+            create_starting_xi_event(779, "Argentina"),
+            {
+                "id": "pass-event",
+                "type": {"id": 30, "name": "Pass"},
+                "team": {"id": 779, "name": "Argentina"}
+            },
+            {
+                "id": "shot-event",
+                "type": {"id": 16, "name": "Shot"},
+                "team": {"id": 792, "name": "Australia"}
+            },
+            create_starting_xi_event(792, "Australia"),
+            {
+                "id": "tackle-event",
+                "type": {"id": 4, "name": "Tackle"},
+                "team": {"id": 779, "name": "Argentina"}
+            }
+        ]
+
+        result = identify_teams(
             club_name="Argentina",
-            club_statsbomb_team_id=new_statsbomb_id,  # Now set
-            events=events,
-            opponent_name="Australia",
-            opponent_logo_url="https://example.com/australia.png"
+            events=events
         )
 
-        assert second_result['should_update_club_statsbomb_id'] is False
-        assert second_result['new_statsbomb_team_id'] is None
-        assert second_result['our_team_id'] == 779
-        assert second_result['our_team_name'] == "Argentina"
+        # Should correctly extract teams despite extra events
+        assert result['our_club_statsbomb_team_id'] == 779
+        assert result['opponent_statsbomb_team_id'] == 792

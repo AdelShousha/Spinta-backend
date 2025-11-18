@@ -1,12 +1,11 @@
 """
-Team identification and opponent club handling service.
+Team identification service.
 
-This module provides functions to identify our team and opponent team from
-StatsBomb Starting XI events, with smart matching logic for first vs subsequent matches.
+This module provides pure processing logic to identify our team and opponent team
+from StatsBomb Starting XI events using fuzzy name matching.
 """
 
-from typing import List, Optional, Dict, Any
-from uuid import UUID, uuid4
+from typing import List, Optional
 import difflib
 
 
@@ -57,92 +56,23 @@ def fuzzy_match_team_name(club_name: str, team_1_name: str, team_2_name: str) ->
     return None  # No match
 
 
-def get_or_create_opponent_club(
-    statsbomb_team_id: int,
-    opponent_name: str,
-    opponent_logo_url: str,
-    existing_opponents: Optional[List[Dict[str, Any]]] = None
-) -> Dict[str, Any]:
-    """
-    Get or create opponent club using ONLY statsbomb_team_id for matching.
-
-    This function simulates database operations for testing purposes.
-    In production, this will be integrated with SQLAlchemy ORM.
-
-    Args:
-        statsbomb_team_id: StatsBomb team ID from event data
-        opponent_name: Opponent name from request body
-        opponent_logo_url: Opponent logo URL from request body
-        existing_opponents: Simulated existing opponents (for testing)
-
-    Returns:
-        {
-            'opponent_club_id': UUID,
-            'statsbomb_team_id': int,
-            'opponent_name': str,
-            'logo_url': str,
-            'is_new': bool
-        }
-    """
-    # Simulate: SELECT opponent_club_id FROM opponent_clubs
-    #           WHERE statsbomb_team_id = :statsbomb_team_id
-    if existing_opponents:
-        for opponent in existing_opponents:
-            if opponent.get('statsbomb_team_id') == statsbomb_team_id:
-                return {
-                    'opponent_club_id': opponent['opponent_club_id'],
-                    'statsbomb_team_id': opponent['statsbomb_team_id'],
-                    'opponent_name': opponent['opponent_name'],
-                    'logo_url': opponent['logo_url'],
-                    'is_new': False
-                }
-
-    # Not found - create new opponent club
-    # Simulate: INSERT INTO opponent_clubs (
-    #   opponent_club_id, statsbomb_team_id, opponent_name, logo_url, created_at
-    # ) VALUES (...)
-    new_opponent_club_id = uuid4()
-
-    return {
-        'opponent_club_id': new_opponent_club_id,
-        'statsbomb_team_id': statsbomb_team_id,
-        'opponent_name': opponent_name,
-        'logo_url': opponent_logo_url,
-        'is_new': True
-    }
-
-
-def identify_teams_and_opponent(
-    club_name: str,
-    club_statsbomb_team_id: Optional[int],
-    events: List[dict],
-    opponent_name: str,
-    opponent_logo_url: str,
-    existing_opponents: Optional[List[Dict[str, Any]]] = None
-) -> dict:
+def identify_teams(club_name: str, events: List[dict]) -> dict:
     """
     Identify our team and opponent team from Starting XI events.
 
-    This function handles both first match (fuzzy matching) and subsequent matches
-    (direct ID matching). It also handles get/create logic for opponent clubs.
+    Pure processing logic - extracts team information from event data using
+    fuzzy name matching. No database operations.
 
     Args:
         club_name: Our club's name from database (e.g., "Argentina")
-        club_statsbomb_team_id: Our club's StatsBomb team ID (None for first match)
         events: Full StatsBomb events array
-        opponent_name: Opponent name from request body
-        opponent_logo_url: Opponent logo URL from request body
-        existing_opponents: Simulated existing opponents (for testing)
 
     Returns:
         {
-            'our_team_id': int,
-            'our_team_name': str,
-            'opponent_club_id': UUID,
-            'opponent_team_id': int,
-            'opponent_team_name': str,
-            'should_update_club_statsbomb_id': bool,
-            'new_statsbomb_team_id': int or None
+            'our_club_statsbomb_team_id': int,
+            'our_club_name': str,
+            'opponent_statsbomb_team_id': int,
+            'opponent_name': str
         }
 
     Raises:
@@ -174,130 +104,91 @@ def identify_teams_and_opponent(
     team_2_id = starting_xi_events[1]['team']['id']
     team_2_name = starting_xi_events[1]['team']['name']
 
-    # Step 3: Identify our team (smart matching)
-    if club_statsbomb_team_id is None:
-        # First match: fuzzy match by name
-        matched = fuzzy_match_team_name(club_name, team_1_name, team_2_name)
+    # Step 3: Identify our team using fuzzy matching
+    matched = fuzzy_match_team_name(club_name, team_1_name, team_2_name)
 
-        if matched == 1:
-            our_team_id = team_1_id
-            our_team_name = team_1_name
-            opponent_team_id = team_2_id
-            opponent_team_name = team_2_name
-        elif matched == 2:
-            our_team_id = team_2_id
-            our_team_name = team_2_name
-            opponent_team_id = team_1_id
-            opponent_team_name = team_1_name
-        else:
-            raise ValueError(
-                f"Cannot match your club name '{club_name}' to teams in event data: "
-                f"'{team_1_name}', '{team_2_name}'"
-            )
-
-        should_update = True
-        new_statsbomb_team_id = our_team_id
-
+    if matched == 1:
+        our_club_statsbomb_team_id = team_1_id
+        our_club_name = team_1_name
+        opponent_statsbomb_team_id = team_2_id
+        opponent_name = team_2_name
+    elif matched == 2:
+        our_club_statsbomb_team_id = team_2_id
+        our_club_name = team_2_name
+        opponent_statsbomb_team_id = team_1_id
+        opponent_name = team_1_name
     else:
-        # Subsequent match: direct match by ID
-        if club_statsbomb_team_id == team_1_id:
-            our_team_id = team_1_id
-            our_team_name = team_1_name
-            opponent_team_id = team_2_id
-            opponent_team_name = team_2_name
-        elif club_statsbomb_team_id == team_2_id:
-            our_team_id = team_2_id
-            our_team_name = team_2_name
-            opponent_team_id = team_1_id
-            opponent_team_name = team_1_name
-        else:
-            raise ValueError(
-                f"Club's statsbomb_team_id {club_statsbomb_team_id} doesn't match "
-                f"either team in events: {team_1_id} ({team_1_name}), "
-                f"{team_2_id} ({team_2_name})"
-            )
-
-        should_update = False
-        new_statsbomb_team_id = None
-
-    # Step 4: Get or create opponent club (match by StatsBomb team ID ONLY)
-    opponent_club_data = get_or_create_opponent_club(
-        statsbomb_team_id=opponent_team_id,
-        opponent_name=opponent_name,
-        opponent_logo_url=opponent_logo_url,
-        existing_opponents=existing_opponents
-    )
+        raise ValueError(
+            f"Cannot match your club name '{club_name}' to teams in event data: "
+            f"'{team_1_name}', '{team_2_name}'"
+        )
 
     # Return result
     return {
-        'our_team_id': our_team_id,
-        'our_team_name': our_team_name,
-        'opponent_club_id': opponent_club_data['opponent_club_id'],
-        'opponent_team_id': opponent_team_id,
-        'opponent_team_name': opponent_team_name,
-        'should_update_club_statsbomb_id': should_update,
-        'new_statsbomb_team_id': new_statsbomb_team_id
+        'our_club_statsbomb_team_id': our_club_statsbomb_team_id,
+        'our_club_name': our_club_name,
+        'opponent_statsbomb_team_id': opponent_statsbomb_team_id,
+        'opponent_name': opponent_name
     }
 
 
-# Manual testing
+# Interactive manual testing
 if __name__ == "__main__":
     import json
     import sys
 
-    # Usage: python app/services/team_identifier.py [events_file]
+    print("=" * 60)
+    print("Team Identification - Manual Test")
+    print("=" * 60)
 
-    # Load events from file
-    events_file = sys.argv[1] if len(sys.argv) > 1 else "docs/15946.json"
-
+    # Interactive input
     try:
-        with open(events_file, 'r', encoding='utf-8') as f:
+        json_file_path = input("\nEnter path to JSON file (or press Enter for default): ").strip()
+        if not json_file_path:
+            json_file_path = "docs/15946.json"
+
+        club_name = input("Enter our club name: ").strip()
+        if not club_name:
+            print("Error: Club name is required")
+            sys.exit(1)
+
+        print("\n" + "-" * 60)
+        print(f"Loading events from: {json_file_path}")
+        print(f"Club name: {club_name}")
+        print("-" * 60)
+
+        # Load events from file
+        with open(json_file_path, 'r', encoding='utf-8') as f:
             events = json.load(f)
-    except FileNotFoundError:
-        print(f"Error: File '{events_file}' not found")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"Error: Invalid JSON in '{events_file}': {e}")
-        sys.exit(1)
 
-    # Test parameters (modify these to test different scenarios)
-    club_name = "Argentina"
-    club_statsbomb_team_id = None  # Change to 779 to test subsequent match
-    opponent_name = "Australia"
-    opponent_logo_url = "https://example.com/australia.png"
+        print(f"✓ Loaded {len(events)} events")
 
-    print("=" * 60)
-    print("Testing Team Identification")
-    print("=" * 60)
-    print(f"Club name: {club_name}")
-    print(f"Club StatsBomb ID: {club_statsbomb_team_id}")
-    print(f"Events file: {events_file}")
-    print(f"Opponent name (from request): {opponent_name}")
-    print(f"Opponent logo URL (from request): {opponent_logo_url}")
-    print("-" * 60)
-
-    try:
         # Run function
-        result = identify_teams_and_opponent(
-            club_name=club_name,
-            club_statsbomb_team_id=club_statsbomb_team_id,
-            events=events,
-            opponent_name=opponent_name,
-            opponent_logo_url=opponent_logo_url
-        )
+        print("\nProcessing...")
+        result = identify_teams(club_name, events)
 
         # Print result
-        print("\nResult:")
-        print(json.dumps(result, indent=2, default=str))
         print("\n" + "=" * 60)
-        print("Success!")
+        print("RESULT:")
         print("=" * 60)
+        print(json.dumps(result, indent=2))
+        print("=" * 60)
+        print("✓ Success!")
 
-    except ValueError as e:
-        print(f"\nError: {e}")
+    except FileNotFoundError:
+        print(f"\n✗ Error: File '{json_file_path}' not found")
         sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"\n✗ Error: Invalid JSON in '{json_file_path}': {e}")
+        sys.exit(1)
+    except ValueError as e:
+        print(f"\n✗ Error: {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n\nCancelled by user")
+        sys.exit(0)
     except Exception as e:
-        print(f"\nUnexpected error: {e}")
+        print(f"\n✗ Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

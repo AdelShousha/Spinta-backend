@@ -412,43 +412,52 @@ Each iteration follows this workflow:
 
 ---
 
-#### Iteration 1: Team Identification ❌
+#### Iteration 1: Team Identification ✅ COMPLETED
 
-**Goal:** Match club name to StatsBomb teams from Starting XI events
+**Goal:** Extract team information from StatsBomb events using fuzzy matching (pure processing logic)
 
-**Function:** `identify_teams(events: List[dict], club_name: str) → dict`
+**Function:** `identify_teams(club_name: str, events: List[dict]) → dict`
 
 **Input:**
-- StatsBomb events array
-- Coach's club name
+- `club_name`: Our club's name from database
+- `events`: StatsBomb events array
 
 **Output:**
 ```python
 {
-  'our_team_id': int,
-  'our_team_name': str,
-  'opponent_team_id': int,
-  'opponent_team_name': str
+  'our_club_statsbomb_team_id': int,
+  'our_club_name': str,
+  'opponent_statsbomb_team_id': int,
+  'opponent_name': str
 }
 ```
 
 **Processing:**
-- Extract 2 Starting XI events
+- Extract 2 Starting XI events (type.id = 35)
 - Validate each has exactly 11 players
 - Fuzzy match club_name to team names (exact → substring → 80% similarity)
-- Return matched team IDs
+- Return matched team information
 
-**Tests:**
-- Test exact match
-- Test substring match ("Thunder United FC" → "Thunder United")
-- Test fuzzy match (80% threshold)
-- Test error when no match found
-- Test error when != 2 Starting XI events
-- Test error when lineup != 11 players
+**Tests:** 18 tests (all passing)
+- 7 fuzzy matching tests
+- 5 team identification tests
+- 4 validation error tests
+- 3 end-to-end tests
+
+**Manual Testing:**
+```bash
+python app/services/team_identifier.py
+# Interactive prompts for JSON file path and club name
+```
 
 **Files:**
-- `app/services/team_identifier.py`
-- `tests/services/test_team_identifier.py`
+- `app/services/team_identifier.py` ✅
+- `tests/services/test_team_identifier.py` ✅
+
+**Key Notes:**
+- Pure processing logic only (no database operations)
+- Simplified from original plan (removed first/subsequent match logic)
+- Uses exact naming convention: our_club_*, opponent_*
 
 ---
 
@@ -456,26 +465,23 @@ Each iteration follows this workflow:
 
 **Goal:** Get or create opponent club record
 
-**Function:** `get_or_create_opponent_club(team_id: int, name: str, logo_url: str) → UUID`
+**Function:** `get_or_create_opponent_club(opponent_statsbomb_team_id: int, opponent_name: str, logo_url: str) → UUID`
 
 **Input:**
-- StatsBomb team ID
-- Opponent name
-- Logo URL (optional)
+- `opponent_statsbomb_team_id`: StatsBomb team ID
+- `opponent_name`: Opponent name
+- `logo_url`: Opponent logo URL (optional)
 
 **Output:** `opponent_club_id` (UUID)
 
 **Processing:**
 - Check if exists by `statsbomb_team_id`
-- If not, check by `opponent_name`
 - If not found, create new opponent_clubs record
 - Return `opponent_club_id`
 
 **Tests:**
 - Test create new opponent club
 - Test retrieve existing by statsbomb_team_id
-- Test retrieve existing by name
-- Test update logo if changed
 
 **Files:**
 - `app/services/opponent_service.py`
