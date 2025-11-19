@@ -873,94 +873,406 @@ python -m app.services.player_service
 
 ---
 
-#### Iteration 6: Match Lineups Creation ❌
+#### Iteration 6: Match Lineups Creation ✅ COMPLETED
 
-**Goal:** Create lineup entries for both teams
+**Goal:** Create 22 match lineup records (11 our_team + 11 opponent_team) from Starting XI events
 
-**Function:** `create_match_lineups(match_id: UUID, our_lineup: List, opp_lineup: List) → int`
+**Functions:**
 
-**Input:**
-- match_id
-- Our team lineup data (11 players with player_ids)
-- Opponent lineup data (11 players with opponent_player_ids)
+1. **Helper (Pure Processing):** `parse_both_lineups_from_events(events, our_club_statsbomb_id, opponent_club_statsbomb_id) → dict`
+2. **Main (Database):** `create_match_lineups(db, match_id, events) → dict`
 
-**Output:** Count of lineups created (should be 22)
-
-**Processing:**
-- For each our player: insert with team_type='our_team', player_id set
-- For each opponent player: insert with team_type='opponent_team', opponent_player_id set
-- Denormalize player_name, jersey_number, position
-
-**Tests:**
-- Test create 11 our_team lineups
-- Test create 11 opponent_team lineups
-- Test denormalized fields populated
-- Test total count = 22
-
-**Files:**
-- `app/services/lineup_service.py`
-- `tests/services/test_lineup_service.py`
-
----
-
-#### Iteration 7: Events Storage ❌
-
-**Goal:** Bulk insert ~3000 events into database
-
-**Function:** `insert_events(match_id: UUID, events: List[dict]) → int`
-
-**Input:**
-- match_id
-- Full StatsBomb events array
-
-**Output:** Count of events inserted
-
-**Processing:**
-- Batch events (500 per query for performance)
-- For each event:
-  - Extract key fields for indexing (player_id, team_id, type, minute, etc.)
-  - Store full JSON in event_data (JSONB)
-- Bulk insert
-
-**Tests:**
-- Test bulk insert performance
-- Test JSONB storage of event_data
-- Test extract key fields correctly
-- Test handle events without player (Half Start, etc.)
-- Test batch size = 500
-
-**Files:**
-- `app/services/event_service.py`
-- `tests/services/test_event_service.py`
-
----
-
-#### Iteration 8: Goals Extraction ❌
-
-**Goal:** Extract goals from Shot events
-
-**Function:** `extract_goals(match_id: UUID, events: List[dict], our_team_name: str) → dict`
-
-**Input:**
-- match_id
-- Events array
-- our_team_name (for determining is_our_goal)
+**Parameter Sources:**
+- `db`: Database session
+- `match_id`: From match creation (Iteration 3)
+- `events`: StatsBomb events array from request body
 
 **Output:**
 ```python
 {
-  'goals_count': int,
-  'warnings': List[str]  # If extracted count != admin input
+    'lineups_created': 22,
+    'our_team_count': 11,
+    'opponent_team_count': 11
 }
 ```
 
 **Processing:**
-- Filter Shot events where shot.outcome.name == "Goal"
-- For each goal:
-  - Extract scorer_name, minute, second
-  - Determine is_our_goal (team_name == our_team_name)
-  - Insert into goals table
-- Validate count matches admin input scores
+
+**Helper Function:**
+1. Extract Starting XI events (filter `type.id == 35`)
+2. Validate exactly 2 Starting XI events
+3. Use `team.id` to identify which lineup belongs to which team
+4. Parse lineup data from both teams (11 players each)
+5. Return both lineups with: player_name, statsbomb_player_id, jersey_number, position
+
+**Main Function:**
+1. **Get match and team IDs:**
+   - Query matches table using `match_id` → get `club_id`, `opponent_club_id`
+   - Query clubs table → get `our_club_statsbomb_id`
+   - Query opponent_clubs table → get `opponent_club_statsbomb_id`
+
+2. **Check for duplicates:**
+   - Query MatchLineup by `match_id`
+   - If exists → raise ValueError (prevent duplicates)
+
+3. **Parse lineups:**
+   - Call helper function: `parse_both_lineups_from_events()`
+   - Get both lineups (11 + 11 players)
+
+4. **Process our team (11 players):**
+   - For each player in our_lineup:
+     - Query players table: `WHERE club_id = ? AND statsbomb_player_id = ?`
+     - If not found → raise ValueError
+     - Create MatchLineup with:
+       - `team_type='our_team'`
+       - `player_id` from database
+       - `opponent_player_id=NULL`
+       - Denormalize: player_name, jersey_number, position from event
+
+5. **Process opponent team (11 players):**
+   - For each player in opponent_lineup:
+     - Query opponent_players table: `WHERE opponent_club_id = ? AND statsbomb_player_id = ?`
+     - If not found → raise ValueError
+     - Create MatchLineup with:
+       - `team_type='opponent_team'`
+       - `player_id=NULL`
+       - `opponent_player_id` from database
+       - Denormalize: player_name, jersey_number, position from event
+
+6. **Validate and commit:**
+   - Count = 22 (raise error if not)
+   - Commit all records
+   - Return counts
+
+**Tests:** 13 tests (all passing)
+
+**Helper Function Tests (5):**
+- ✅ Test extracts 11 our players
+- ✅ Test extracts 11 opponent players
+- ✅ Test uses team.id for our team
+- ✅ Test uses team.id for opponent team
+- ✅ Test raises error if not 2 Starting XI events
+
+**Main Function Tests (8):**
+- ✅ Test creates 22 lineup records (11 + 11)
+- ✅ Test creates 11 our_team lineups
+- ✅ Test creates 11 opponent_team lineups
+- ✅ Test sets denormalized fields correctly (from events, not database)
+- ✅ Test matches player_ids correctly by statsbomb_player_id
+- ✅ Test raises error if match not found
+- ✅ Test raises error if player not found in database
+- ✅ Test raises error if lineups already exist (prevent duplicates)
+
+**Manual Testing:**
+Interactive CLI to test lineup parsing:
+```bash
+python -m app.services.lineup_service
+# Prompts for:
+# 1. JSON file path (default: data/3869685.json)
+# 2. Our team StatsBomb ID (e.g., 779)
+# 3. Opponent team StatsBomb ID (e.g., 771)
+# Output: Two sections with 11 players each:
+#   - Player name
+#   - StatsBomb player ID
+#   - Jersey number
+#   - Position
+```
+
+**Files:**
+- `app/services/lineup_service.py` ✅ (new file)
+- `tests/services/test_lineup_service.py` ✅ (new file)
+
+**Key Features:**
+- **Pure Processing Helper**: `parse_both_lineups_from_events()` for easy manual testing
+- **Team Identification**: Uses `team.id` to identify which lineup belongs to which team
+- **Strict Validation**: Raises errors for missing players, duplicate lineups, invalid data
+- **Denormalized Data**: Stores player_name, jersey_number, position in lineup records for query performance
+- **Database Matching**: Matches players by `(club_id/opponent_club_id, statsbomb_player_id)`
+- **Duplicate Prevention**: Checks if lineups already exist before creating
+- **Manual Testing**: Interactive CLI for verifying lineup extraction with real data
+
+---
+
+#### Iteration 7: Events Storage ✅ COMPLETED
+
+**Goal:** Store Pass, Shot, and Dribble events from StatsBomb data with extracted fields for indexing and full JSON for detailed analysis
+
+**Functions:**
+
+1. **Helper (Pure Processing):** `parse_events_for_storage(events: List[dict]) → dict`
+2. **Main (Database):** `insert_events(db: Session, match_id: UUID, events: List[dict]) → int`
+
+**Parameter Sources:**
+- `db`: Database session
+- `match_id`: From match creation (Iteration 3)
+- `events`: StatsBomb events array from request body
+
+**Event Types Stored (filter by type.id):**
+- Pass: `type.id = 30`
+- Shot: `type.id = 16`
+- Dribble: `type.id = 14`
+
+**All other event types are excluded** (e.g., Half Start, Starting XI, Substitution, etc.)
+
+**Output:**
+```python
+# Helper function returns:
+{
+    'total_events': int,  # Total events in input
+    'filtered_count': int,  # Events matching type filter (14, 16, 30)
+    'first_shot': {
+        'raw': dict,  # Full event JSON
+        'extracted': {
+            'player_name': str | None,
+            'statsbomb_player_id': int | None,
+            'team_name': str | None,
+            'statsbomb_team_id': int | None,
+            'event_type_name': str | None,
+            'position_name': str | None,
+            'minute': int | None,
+            'second': int | None,
+            'period': int | None
+        }
+    } | None,  # None if no shots found
+    'first_pass': { ... } | None,
+    'first_dribble': { ... } | None
+}
+
+# Main function returns:
+int  # Count of events inserted
+```
+
+**Processing:**
+
+**Helper Function:**
+1. Filter events to only type.id in [14, 16, 30]
+2. Find first occurrence of each type (shot, pass, dribble)
+3. Extract database fields using safe `.get()` (handles missing fields)
+4. Return raw JSON and extracted fields for manual verification
+
+**Main Function:**
+1. **Validate match exists:**
+   - Query matches table using `match_id`
+   - If not found → raise ValueError
+
+2. **Filter events:**
+   - Filter to only type.id in [14, 16, 30]
+   - Store in filtered list
+
+3. **Validate filtered count:**
+   - If filtered count == 0 → raise ValueError("No Pass, Shot, or Dribble events found")
+
+4. **Batch insert (500 events per batch):**
+   - Loop through filtered events
+   - For each event:
+     - Extract all fields using safe `.get()`:
+       - `player_name` = `event.get('player', {}).get('name')`
+       - `statsbomb_player_id` = `event.get('player', {}).get('id')`
+       - `team_name` = `event.get('team', {}).get('name')`
+       - `statsbomb_team_id` = `event.get('team', {}).get('id')`
+       - `event_type_name` = `event.get('type', {}).get('name')`
+       - `position_name` = `event.get('position', {}).get('name')`
+       - `minute` = `event.get('minute')`
+       - `second` = `event.get('second')`
+       - `period` = `event.get('period')`
+       - `event_data` = event (full JSON)
+     - Create Event record with all extracted fields
+     - Add to session with `db.add()`
+   - Every 500 events: `db.commit()`
+   - After loop: Final `db.commit()` for remaining events
+
+5. **Return count:**
+   - Return total count of events inserted
+
+**Field Extraction Strategy:**
+- All fields are nullable in database (handles missing data)
+- Use `.get()` with dict navigation for safe extraction
+- Events without `player` field: player_name, statsbomb_player_id, position_name → None
+- Events without `position` field: position_name → None
+- Full event JSON preserved in `event_data` (JSONB) for future analysis
+
+**Tests:** 13 tests (all passing)
+
+**Helper Function Tests (6):**
+- ✅ Test filters only 3 event types (Pass, Shot, Dribble)
+- ✅ Test extracts all fields correctly from valid events
+- ✅ Test handles events without player field (sets fields to None)
+- ✅ Test handles events without position field (sets field to None)
+- ✅ Test returns None for missing event types (e.g., 0 dribbles)
+- ✅ Test counts filtered events correctly
+
+**Main Function Tests (7):**
+- ✅ Test inserts correct count of events (only 3 types)
+- ✅ Test batch insert with >500 events (verifies batching works)
+- ✅ Test event_data stored as JSON (full event preserved in JSONB)
+- ✅ Test all extracted fields match database records
+- ✅ Test handles events without player (nullable fields work)
+- ✅ Test raises error if match not found
+- ✅ Test raises error if zero filtered events
+
+**Manual Testing:**
+Interactive CLI to test event extraction:
+```bash
+python -m app.services.event_service
+# Prompts for:
+# 1. JSON file path (default: data/3869685.json)
+# Output: Three sections showing first shot/pass/dribble:
+#   - Raw event JSON (first 500 chars)
+#   - Extracted fields for database
+#   - Total events and filtered count
+```
+
+**Files:**
+- `app/services/event_service.py` ✅ (new file)
+- `tests/services/test_event_service.py` ✅ (new file)
+
+**Key Features:**
+- **Event Type Filtering**: Only stores Pass (30), Shot (16), Dribble (14) - reduces ~3000 events to ~500-800
+- **Pure Processing Helper**: `parse_events_for_storage()` for easy manual testing
+- **Safe Field Extraction**: Uses `.get()` to handle missing fields (all nullable)
+- **Batch Inserts**: 500 events per batch for optimal performance
+- **JSONB Storage**: Full event JSON preserved with GIN index for querying
+- **Validation**: Raises errors for invalid match_id or zero filtered events
+- **Allows Re-insertion**: No duplicate checking (simpler, allows re-processing)
+- **Manual Testing**: Interactive CLI for verifying extraction with real data
+
+**Performance:**
+- Original: ~3000 events per match (all types)
+- After filtering: ~500-800 events per match (Pass/Shot/Dribble only)
+- Batch size: 500 events → typically 1-2 batches per match
+- Storage: JSONB with GIN index for efficient JSON querying
+
+---
+
+#### Iteration 8: Goals Extraction ✅ COMPLETED
+
+**Goal:** Extract goals from Shot events with scorer information and timing
+
+**Function:** `insert_goals(db, match_id: UUID, events: List[dict], our_club_statsbomb_id: int, opponent_statsbomb_id: int) → int`
+
+**Input:**
+- `db`: Database session
+- `match_id`: Match ID (UUID)
+- `events`: StatsBomb events array
+- `our_club_statsbomb_id`: StatsBomb team ID for our club (from Iteration 3 logic)
+- `opponent_statsbomb_id`: StatsBomb team ID for opponent
+
+**Output:**
+- `int`: Count of goals inserted (0 or more, 0 is valid for goalless matches)
+
+**Processing Logic:**
+
+1. **Validate match exists:**
+   - Query Match by match_id
+   - Raise ValueError if not found
+
+2. **Parse goals using helper function:**
+   - Call `parse_goals_from_events()` to extract goal data
+   - Returns list of goal dicts with scorer_name, minute, second, is_our_goal
+
+3. **Insert goals into database:**
+   - For each goal dict:
+     - Create Goal record with all extracted fields
+     - Add to session with `db.add()`
+   - Single `db.commit()` after all goals
+
+4. **Return count:**
+   - Return total count of goals inserted
+
+**Helper Function:** `parse_goals_from_events(events, our_club_statsbomb_id, opponent_statsbomb_id) → List[dict]`
+
+**Purpose:** Pure processing function that extracts goal data from Shot events (no database).
+
+**Processing:**
+1. **Filter Shot events with Goal outcome:**
+   - `event.get('type', {}).get('id') == 16` (Shot event)
+   - `event.get('shot', {}).get('outcome', {}).get('id') == 97` (Goal outcome)
+   - **EXCLUDE** `event.get('period') == 5` (penalty shootout goals)
+
+2. **For each goal event, extract fields:**
+   - `scorer_name`: `event.get('player', {}).get('name')` or `"Unknown"` if missing
+   - `minute`: `event.get('minute')` (required)
+   - `second`: `event.get('second')` (nullable - None if missing)
+   - `is_our_goal`: Check if `event.get('team', {}).get('id') == our_club_statsbomb_id`
+     - **Uses `team.id`** (not `possession_team.id` - avoids kick-off team issue)
+
+3. **Return list of goal dicts:**
+   ```python
+   [
+       {
+           'scorer_name': str,      # Player name or "Unknown"
+           'minute': int,           # Match minute
+           'second': int | None,    # Match second (None if missing)
+           'is_our_goal': bool      # True if our team scored
+       },
+       ...
+   ]
+   ```
+
+**Tests:** 13 tests (all passing)
+
+**Helper Function Tests (7):**
+- ✅ Test extracts goals from Shot events with outcome 97 (Goal)
+- ✅ Test excludes non-goal shots (Saved, Blocked, Off Target, Post, etc.)
+- ✅ Test excludes penalty shootout goals (period 5)
+- ✅ Test extracts all fields correctly (scorer_name, minute, second, is_our_goal)
+- ✅ Test handles missing player field (uses "Unknown")
+- ✅ Test handles missing second field (returns None)
+- ✅ Test determines is_our_goal correctly for both teams
+
+**Main Function Tests (6):**
+- ✅ Test inserts goals into database with correct fields
+- ✅ Test returns 0 for no goals (valid scenario - goalless matches)
+- ✅ Test raises error if match not found
+- ✅ Test excludes penalty shootout goals (period 5)
+- ✅ Test handles missing player field (stores "Unknown" scorer)
+- ✅ Test handles missing second field (stores None)
+
+**Manual Testing:**
+Interactive CLI to test goal extraction:
+```bash
+python -m app.services.goal_service
+# Prompts for:
+# 1. JSON file path (default: data/3869685.json)
+# 2. Our club StatsBomb ID (default: 217 for Barcelona)
+# 3. Opponent StatsBomb ID (default: 206 for Deportivo Alavés)
+# Output: Summary and detailed list of all goals:
+#   - Total events and total goals found
+#   - Goal counts by team (our goals vs opponent goals)
+#   - For each goal: scorer, time, team
+```
+
+**Files:**
+- `app/services/goal_service.py` ✅ (new file)
+- `tests/services/test_goal_service.py` ✅ (new file)
+
+**Key Features:**
+- **Uses Iteration 3 Logic**: Gets team IDs same way as `count_goals_from_events()`
+- **Pure Processing Helper**: `parse_goals_from_events()` for easy manual testing
+- **Excludes Penalty Shootouts**: Period 5 goals filtered out (only regular play)
+- **Safe Field Extraction**: Uses `.get()` to handle missing fields
+- **Team Identification**: Uses `team.id` (not `possession_team.id`) for accuracy
+- **Handles Missing Data**: "Unknown" for missing player, None for missing second
+- **Zero Goals Valid**: Returns 0 for goalless matches (not an error)
+- **Validation**: Raises error for invalid match_id
+- **Manual Testing**: Interactive CLI for verifying extraction with real data
+
+**Field Mapping:**
+- **Database Table**: `goals`
+- **Fields Stored**:
+  - `match_id`: UUID (from function parameter)
+  - `scorer_name`: str (player.name or "Unknown")
+  - `minute`: int (event.minute)
+  - `second`: int | None (event.second, nullable)
+  - `is_our_goal`: bool (team.id == our_club_statsbomb_id)
+
+**Business Logic:**
+- **Penalty Shootouts**: Excluded (period 5) - only regular play goals counted
+- **Team Identification**: Uses `team.id` from event for correct team assignment
+- **Missing Player**: Uses "Unknown" as scorer_name (e.g., own goals)
+- **Missing Second**: Stored as None (some events lack precise timing)
+
+---
 
 **Tests:**
 - Test filter Shot events with outcome="Goal"
