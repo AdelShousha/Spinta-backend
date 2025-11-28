@@ -1345,9 +1345,11 @@ int  # Number of records inserted (always 2)
      - Off target: outcomes [98=Off T, 99=Post, 101=Wayward]
      - GK saves: count opponent's shots with outcomes [100, 116]
    - **Passes (type.id = 30)**:
-     - Count total and completed passes (no outcome field = completed)
+     - **Exclude set pieces**: Throw-ins, Goal Kicks, Corners (pass.type.name not in exclusion list)
+     - Count total and completed passes
+     - **Completion check**: outcome.name is None OR not in ["Incomplete", "Out", "Pass Offside", "Unknown"]
      - Calculate completion rate
-     - Count final third passes (location[0] > 80)
+     - Count final third passes (location[0] >= 80, inclusive boundary)
      - Count long passes (length > 30)
      - Count crosses (pass.cross = True)
    - **Dribbles (type.id = 14)**:
@@ -1428,6 +1430,9 @@ python -m app.services.match_statistics_service
 - **Possession Calculation**: Sums event durations (NOT count of sequences) - corrected from initial plan
 - **Shot Categorization**: Uses correct outcome IDs [97, 100, 116] for on target vs [98, 99, 101] for off target
 - **Goalkeeper Saves**: Counts BOTH outcomes [100=Saved, 116=Saved to Post] - corrected from initial plan
+- **Set Piece Exclusion**: Throw-ins, Goal Kicks, and Corners excluded from pass statistics (but count for possession)
+- **Robust Pass Completion**: Uses outcome.name to check against specific failure types ["Incomplete", "Out", "Pass Offside", "Unknown"] instead of checking field existence
+- **Final Third Inclusive Boundary**: location[0] >= 80 (inclusive) instead of > 80 (exclusive)
 - **Ball Recoveries**: Excludes recovery_failure = True - corrected from initial plan
 - **Tackle Success**: Uses outcome IDs [4, 15, 16, 17] - corrected from initial plan
 - **Penalty Shootout Exclusion**: Period 5 events filtered out

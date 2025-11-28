@@ -28,7 +28,9 @@ def create_pass_event(
     location: list = None,
     pass_length: float = 10.0,
     pass_outcome_id: int = None,  # None = successful, 9 = incomplete
+    pass_outcome_name: str = None,  # Outcome name (e.g., "Incomplete", "Out")
     is_cross: bool = False,
+    pass_type_name: str = None,  # Pass type (e.g., "Throw-in", "Goal Kick", "Corner")
     period: int = 1,
     duration: float = 1.0,
     possession_id: int = 1
@@ -41,8 +43,17 @@ def create_pass_event(
         "length": pass_length,
         "end_location": [60.0, 45.0]
     }
-    if pass_outcome_id is not None:
+
+    # Add pass type if specified (for set pieces)
+    if pass_type_name is not None:
+        pass_data["type"] = {"name": pass_type_name}
+
+    # Handle outcome - prefer outcome_name over outcome_id
+    if pass_outcome_name is not None:
+        pass_data["outcome"] = {"name": pass_outcome_name}
+    elif pass_outcome_id is not None:
         pass_data["outcome"] = {"id": pass_outcome_id, "name": "Incomplete"}
+
     if is_cross:
         pass_data["cross"] = True
 
@@ -306,10 +317,10 @@ class TestCalculateMatchStatisticsFromEvents:
         events = [
             create_pass_event(team_id=217),  # Completed (no outcome = success)
             create_pass_event(team_id=217),  # Completed
-            create_pass_event(team_id=217, pass_outcome_id=9),  # Incomplete
+            create_pass_event(team_id=217, pass_outcome_name="Incomplete"),  # Incomplete
             create_pass_event(team_id=206),  # Opponent completed
             create_pass_event(team_id=217),  # Completed
-            create_pass_event(team_id=217, pass_outcome_id=9),  # Incomplete
+            create_pass_event(team_id=217, pass_outcome_name="Incomplete"),  # Incomplete
         ]
 
         # When: Calculate statistics
@@ -328,13 +339,13 @@ class TestCalculateMatchStatisticsFromEvents:
         assert result['opponent_team']['pass_completion_rate'] == Decimal('100.00')
 
     def test_counts_passes_in_final_third(self):
-        """Test passes in final third counted when location[0] > 80."""
+        """Test passes in final third counted when location[0] >= 80."""
         # Given: Passes at different field locations
         events = [
             create_pass_event(team_id=217, location=[85.0, 40.0]),  # Final third
             create_pass_event(team_id=217, location=[90.5, 20.0]),  # Final third
             create_pass_event(team_id=217, location=[75.0, 40.0]),  # NOT final third
-            create_pass_event(team_id=217, location=[80.1, 40.0]),  # Final third (>80)
+            create_pass_event(team_id=217, location=[80.0, 40.0]),  # Final third (>=80)
             create_pass_event(team_id=206, location=[95.0, 40.0]),  # Opponent final third
         ]
 
@@ -345,7 +356,7 @@ class TestCalculateMatchStatisticsFromEvents:
             opponent_statsbomb_id=206
         )
 
-        # Then: Count passes with location[0] > 80
+        # Then: Count passes with location[0] >= 80
         assert result['our_team']['passes_in_final_third'] == 3
         assert result['opponent_team']['passes_in_final_third'] == 1
 
