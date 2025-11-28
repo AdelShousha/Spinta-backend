@@ -124,25 +124,31 @@ def calculate_match_statistics_from_events(
         # PASS EVENTS (type.id = 30)
         elif event_type_id == 30:
             pass_data = event.get('pass', {})
-            location = event.get('location', [])
+            # CHANGE 1: Get the pass type name
+            pass_type_name = pass_data.get('type', {}).get('name')
+            
+            # CHANGE 2: Exclude Throw-ins, Goal Kicks, and Corners
+            if pass_type_name not in ["Throw-in", "Goal Kick", "Corner"]:
+                stats['total_passes'] += 1
+                
+                # CHANGE 3: More robust completion check
+                # (Matches previous analysis: count unless explicitly failed)
+                outcome_name = pass_data.get('outcome', {}).get('name')
+                if outcome_name is None or outcome_name not in ["Incomplete", "Out", "Pass Offside", "Unknown"]:
+                    stats['passes_completed'] += 1
 
-            stats['total_passes'] += 1
+                # CHANGE 4: Final third uses >= 80 (inclusive of the line)
+                location = event.get('location', [])
+                if len(location) >= 1 and location[0] >= 80:
+                    stats['passes_in_final_third'] += 1
 
-            # Completed if no outcome field (or outcome is not failure)
-            if 'outcome' not in pass_data:
-                stats['passes_completed'] += 1
+                # Long passes: pass.length > 30
+                if pass_data.get('length', 0) > 30:
+                    stats['long_passes'] += 1
 
-            # Final third: location[0] > 80
-            if len(location) >= 1 and location[0] > 80:
-                stats['passes_in_final_third'] += 1
-
-            # Long passes: pass.length > 30
-            if pass_data.get('length', 0) > 30:
-                stats['long_passes'] += 1
-
-            # Crosses: pass.cross == True
-            if pass_data.get('cross') is True:
-                stats['crosses'] += 1
+                # Crosses: pass.cross == True
+                if pass_data.get('cross') is True:
+                    stats['crosses'] += 1
 
         # DRIBBLE EVENTS (type.id = 14)
         elif event_type_id == 14:
