@@ -1450,41 +1450,166 @@ python -m app.services.match_statistics_service
 
 ---
 
-#### Iteration 10: Player Match Statistics ❌
+#### Iteration 10: Player Match Statistics ✅ COMPLETED
 
-**Goal:** Calculate per-player statistics
+**Goal:** Calculate and store individual player statistics from StatsBomb events for our team's starting 11
 
-**Function:** `calculate_player_match_statistics(match_id: UUID, events: List[dict], players: List[dict]) → int`
+**Functions:**
 
-**Input:**
-- match_id
-- Events array
-- Our players (with player_id and statsbomb_player_id mapping)
+1. **Helper Function (Pure Processing):**
+   ```python
+   calculate_player_match_statistics_from_events(
+       events: List[dict],
+       our_club_statsbomb_id: int,
+       opponent_statsbomb_id: int
+   ) -> Dict[int, Dict]
+   ```
 
-**Output:** Count of player_match_statistics records created
+2. **Main Function (Database Insertion):**
+   ```python
+   insert_player_match_statistics(
+       db: Session,
+       match_id: UUID,
+       events: List[dict],
+       our_club_statsbomb_id: int,
+       opponent_statsbomb_id: int
+   ) -> int
+   ```
+
+**Parameter Sources:**
+- `db`: Database session
+- `match_id`: Match ID (UUID) from Iteration 3
+- `events`: StatsBomb events array from request body
+- `our_club_statsbomb_id`: From Iteration 1 team identification
+- `opponent_statsbomb_id`: From Iteration 1 team identification
+
+**Output:**
+```python
+# Helper returns: Dict keyed by statsbomb_player_id
+{
+    5503: {  # Messi's statsbomb_player_id
+        'goals': 2,
+        'assists': 1,
+        'expected_goals': Decimal('1.8'),
+        'shots': 5,
+        'shots_on_target': 3,
+        # ... 12 more statistics
+    },
+    ...
+}
+
+# Main function returns:
+int  # Number of records inserted (typically 11 for starting lineup)
+```
 
 **Processing:**
-For each player:
-- Filter events by statsbomb_player_id
-- Count goals (Shot + outcome="Goal")
-- Count assists (Pass + goal_assist=true)
-- Sum xG
-- Calculate shot statistics
-- Calculate pass statistics
-- Calculate dribble statistics
-- Calculate defensive statistics
-- Insert player_match_statistics record
 
-**Tests:**
-- Test goals counting per player
-- Test assists counting
-- Test xG per player
-- Test all statistics calculations
-- Test record per player in lineup
+**Helper Function:**
+1. Initialize player statistics dictionaries (keyed by statsbomb_player_id)
+2. Filter out penalty shootout events (period 5)
+3. Filter out opponent team events (only process our_club_statsbomb_id events)
+4. Process each event by type and player attribution:
+   - **Goals**: Shot (type.id = 16) with outcome = 97
+   - **Assists**: Pass (type.id = 30) with pass.goal_assist = True
+   - **Expected Goals**: Sum shot.statsbomb_xg
+   - **Shots**: Count total and on target [97, 100, 116]
+   - **Passes**: Exclude set pieces, categorize by length (short ≤30, long >30), final third (location[0] >= 80), crosses
+   - **Dribbles**: Count total and successful (outcome = "Complete")
+   - **Tackles**: Duel (type.id = 4) with "Tackle" in type name, success % [4, 15, 16, 17]
+   - **Interceptions**: Type.id = 10, success % [4, 15, 16, 17]
+5. Calculate percentage rates (tackle success, interception success)
+6. Return statistics dict keyed by statsbomb_player_id
+
+**Main Function:**
+1. Validate match exists
+2. Check for duplicate statistics (raise ValueError if exist)
+3. Query MatchLineup for our team's starting 11 (team_type='our_team')
+4. Join with Player table to get statsbomb_player_id
+5. Build mapping: statsbomb_player_id → player_id (UUID)
+6. Call helper function to calculate statistics
+7. Map statsbomb_player_id back to player_id and insert records
+8. Only insert for players in starting lineup (exclude substitutes)
+9. Commit transaction
+10. Return count of inserted records
+
+**Statistics Calculated (17 total):**
+- **Required**: goals, assists (Integer, default 0)
+- **Shooting**: expected_goals (Numeric 8,6), shots, shots_on_target
+- **Passing**: total_passes, completed_passes, short_passes (≤30m), long_passes (>30m), final_third_passes (≥80), crosses
+- **Dribbling**: total_dribbles, successful_dribbles
+- **Defending**: tackles, tackle_success_rate (Numeric 5,2), interceptions, interception_success_rate (Numeric 5,2)
+
+**Tests:** 23 tests (all passing)
+
+**Helper Function Tests (15):**
+- ✅ Test calculates goals from shot events (outcome 97)
+- ✅ Test calculates assists from pass events (goal_assist = True)
+- ✅ Test calculates expected goals sum
+- ✅ Test categorizes shots by outcome (on target vs off target)
+- ✅ Test counts total and completed passes (excludes set pieces)
+- ✅ Test counts short and long passes (boundary at 30m)
+- ✅ Test counts final third passes (≥80) and crosses
+- ✅ Test counts dribbles with success tracking
+- ✅ Test counts tackles with success percentage
+- ✅ Test counts interceptions with CORRECT success logic (outcome IDs 4, 15, 16, 17)
+- ✅ Test handles empty events list
+- ✅ Test returns correct dict structure (all 17 statistics)
+- ✅ Test excludes penalty shootout events (period 5)
+- ✅ Test handles missing optional fields
+- ✅ Test only returns our team's players (filters by team_id)
+
+**Main Function Tests (8):**
+- ✅ Test inserts statistics for starting 11
+- ✅ Test raises error if match not found
+- ✅ Test raises error if statistics already exist
+- ✅ Test handles empty events list
+- ✅ Test stores all 17 statistics fields correctly
+- ✅ Test commits transaction successfully
+- ✅ Test only inserts for starting lineup players (excludes substitutes)
+- ✅ Test excludes penalty shootout events
+
+**Manual Testing:**
+Interactive CLI to test player statistics calculation:
+```bash
+python -m app.services.player_match_statistics_service data/events/7478.json
+# Prompts for:
+# 1. Our club StatsBomb ID (e.g., 217 for Barcelona)
+# 2. Opponent StatsBomb ID (e.g., 206 for Alavés)
+# Output:
+# - Extracts player names from events
+# - Displays each player's name and StatsBomb ID
+# - Shows ALL 17 statistics for every player (zeros displayed for stats with no value)
+# - Percentages shown as "N/A" when no data available
+```
 
 **Files:**
-- `app/services/player_stats_service.py`
-- `tests/services/test_player_stats_service.py`
+- `app/services/player_match_statistics_service.py` ✅ (helper + main + CLI)
+- `tests/services/test_player_match_statistics_service.py` ✅ (23 tests)
+
+**Key Features:**
+- **Pure Processing Helper**: `calculate_player_match_statistics_from_events()` for easy manual testing
+- **Only Starting 11**: Queries MatchLineup to get our team's starting lineup (team_type='our_team'), excludes substitutes
+- **Database-agnostic Return**: Helper returns dict keyed by statsbomb_player_id (no player_id UUID)
+- **Join with Player**: Main function joins MatchLineup with Player to get statsbomb_player_id
+- **Short Passes Definition**: pass.length ≤ 30 meters (natural complement to long passes)
+- **Interception Success**: Uses interception.outcome.id with same success IDs as tackles [4, 15, 16, 17]
+- **Consistent with Match Stats**: Same calculation logic as Iteration 9 (set piece exclusion, pass completion, final third boundary)
+- **Penalty Shootout Exclusion**: Period 5 events filtered out
+- **Duplicate Prevention**: Raises error if statistics already exist for match
+- **Decimal Precision**: Numeric(5,2) for percentages, Numeric(8,6) for xG
+- **Manual Testing**: Interactive CLI for verifying calculations with real data
+- **NULL Handling**: Optional statistics stored as NULL when value is 0 (except goals/assists which default to 0)
+
+**Critical Implementation Decisions:**
+1. **Approach A**: Query database inside main function (consistent with goal_service.py)
+2. **Return Format**: Dict[int, Dict] keyed by statsbomb_player_id (database-agnostic)
+3. **Only Starting 11**: Query MatchLineup for team_type='our_team', ignore statistics for non-lineup players
+4. **Short Passes**: Defined as length ≤ 30m (user-confirmed)
+5. **Interception Success**: Uses outcome.id in [4, 15, 16, 17] (same as tackles)
+6. **Duplicate Handling**: Raise ValueError if statistics already exist (consistent with match_statistics_service)
+
+**User Corrections Applied:**
+1. **Interception Success Logic**: Fixed to check outcome.id in [4, 15, 16, 17] instead of checking if outcome exists (which would count failures as successes)
 
 ---
 
