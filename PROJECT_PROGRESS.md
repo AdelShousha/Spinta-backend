@@ -1286,46 +1286,162 @@ python -m app.services.goal_service
 
 ---
 
-#### Iteration 9: Match Statistics Calculation ❌
+#### Iteration 9: Match Statistics Calculation ✅ COMPLETED
 
-**Goal:** Calculate and store team statistics
+**Goal:** Calculate and store team statistics from StatsBomb events
 
-**Function:** `calculate_match_statistics(match_id: UUID, events: List[dict], teams: dict) → List[UUID]`
+**Functions:**
 
-**Input:**
-- match_id
-- Events array
-- Team names (our_team_name, opponent_team_name)
+1. **Helper Function (Pure Processing):**
+   ```python
+   calculate_match_statistics_from_events(
+       events: List[dict],
+       our_club_statsbomb_id: int,
+       opponent_statsbomb_id: int
+   ) → Dict[str, Dict]
+   ```
 
-**Output:** 2 statistics_ids (our_team, opponent_team)
+2. **Main Function (Database Insertion):**
+   ```python
+   insert_match_statistics(
+       db: Session,
+       match_id: UUID,
+       events: List[dict],
+       our_club_statsbomb_id: int,
+       opponent_statsbomb_id: int
+   ) → int
+   ```
+
+**Parameter Sources:**
+- `db`: Database session
+- `match_id`: Match ID (UUID) from Iteration 3
+- `events`: StatsBomb events array from request body
+- `our_club_statsbomb_id`: From Iteration 1 team identification
+- `opponent_statsbomb_id`: From Iteration 1 team identification
+
+**Output:**
+```python
+# Helper returns:
+{
+    'our_team': {...},      # 18 statistics fields
+    'opponent_team': {...}  # 18 statistics fields
+}
+
+# Main function returns:
+int  # Number of records inserted (always 2)
+```
 
 **Processing:**
-For each team:
-- Calculate possession % (sum event durations / total)
-- Sum xG (shot.statsbomb_xg)
-- Count shots (total, on target, off target)
-- Count goalkeeper saves (opponent shots with outcome="Saved")
-- Calculate pass statistics (total, completed, completion %)
-- Count passes in final third (location[0] > 80)
-- Count long passes (length > 30)
-- Count crosses
-- Calculate dribble statistics
-- Calculate tackle statistics
-- Count interceptions
-- Count ball recoveries
-- Insert match_statistics record
 
-**Tests:**
-- Test possession calculation
-- Test xG summation
-- Test shots counting by outcome
-- Test pass statistics
-- Test defensive statistics
-- Test create 2 records (our_team, opponent_team)
+**Helper Function:**
+1. Initialize statistics dictionaries for both teams (all fields 0/None)
+2. Filter out penalty shootout events (period 5)
+3. Calculate possession by summing event durations where possession_team.id matches
+4. Process each event by type:
+   - **Shots (type.id = 16)**:
+     - Sum xG (shot.statsbomb_xg)
+     - Count total shots
+     - On target: outcomes [97=Goal, 100=Saved, 116=Saved to Post]
+     - Off target: outcomes [98=Off T, 99=Post, 101=Wayward]
+     - GK saves: count opponent's shots with outcomes [100, 116]
+   - **Passes (type.id = 30)**:
+     - Count total and completed passes (no outcome field = completed)
+     - Calculate completion rate
+     - Count final third passes (location[0] > 80)
+     - Count long passes (length > 30)
+     - Count crosses (pass.cross = True)
+   - **Dribbles (type.id = 14)**:
+     - Count total and successful dribbles (outcome.name = "Complete")
+   - **Duels (type.id = 4)**:
+     - Count tackles (duel.type contains "Tackle")
+     - Calculate success % (outcome.id in [4=Won, 15=Success, 16=Success In Play, 17=Success Out])
+   - **Interceptions (type.id = 10)**
+   - **Ball Recoveries (type.id = 2)**: Exclude recovery_failure = True
+5. Calculate percentages (handle division by zero → None)
+6. Return both team statistics
+
+**Main Function:**
+1. Validate match exists
+2. Check for duplicate statistics (raise ValueError if exist)
+3. Call helper function to calculate statistics
+4. Create 2 MatchStatistics records (our_team + opponent_team)
+5. Commit transaction
+6. Return 2
+
+**Statistics Calculated (18 total):**
+- possession_percentage (Numeric 5,2)
+- expected_goals (Numeric 8,6)
+- total_shots, shots_on_target, shots_off_target
+- goalkeeper_saves
+- total_passes, passes_completed, pass_completion_rate (Numeric 5,2)
+- passes_in_final_third, long_passes, crosses
+- total_dribbles, successful_dribbles
+- total_tackles, tackle_success_percentage (Numeric 5,2)
+- interceptions, ball_recoveries
+
+**Tests:** 23 tests (all passing)
+
+**Helper Function Tests (15):**
+- ✅ Test calculates possession percentage correctly (sum event durations)
+- ✅ Test calculates expected goals sum
+- ✅ Test categorizes shots by outcome (97, 100, 116 vs 98, 99, 101)
+- ✅ Test counts goalkeeper saves from opponent shots (100, 116)
+- ✅ Test counts total and completed passes
+- ✅ Test counts passes in final third (location[0] > 80)
+- ✅ Test counts long passes and crosses
+- ✅ Test counts dribbles with success rate
+- ✅ Test counts tackles with success percentage (outcome IDs 4, 15, 16, 17)
+- ✅ Test counts interceptions and ball recoveries (excludes recovery_failure)
+- ✅ Test handles empty events list
+- ✅ Test handles division by zero for percentages (returns None)
+- ✅ Test returns correct dict structure
+- ✅ Test excludes penalty shootout events (period 5)
+- ✅ Test handles missing optional fields
+
+**Main Function Tests (8):**
+- ✅ Test inserts 2 statistics records into database
+- ✅ Test raises error if match not found
+- ✅ Test raises error if statistics already exist
+- ✅ Test handles empty events list (inserts with 0/None values)
+- ✅ Test stores all 18 statistics fields correctly
+- ✅ Test commits transaction successfully
+- ✅ Test sets team_type correctly ('our_team', 'opponent_team')
+- ✅ Test excludes penalty shootout events
+
+**Manual Testing:**
+Interactive CLI to test statistics calculation:
+```bash
+python -m app.services.match_statistics_service
+# Prompts for:
+# 1. JSON file path (default: data/france771.json)
+# 2. Our club StatsBomb ID (default: 779 for Argentina)
+# 3. Opponent StatsBomb ID (default: 771 for France)
+# Output: Formatted statistics for both teams with all 18 fields
+```
 
 **Files:**
-- `app/services/match_stats_service.py`
-- `tests/services/test_match_stats_service.py`
+- `app/services/match_statistics_service.py` ✅ (helper + main + CLI)
+- `tests/services/test_match_statistics_service.py` ✅ (23 tests)
+
+**Key Features:**
+- **Pure Processing Helper**: `calculate_match_statistics_from_events()` for easy manual testing
+- **Possession Calculation**: Sums event durations (NOT count of sequences) - corrected from initial plan
+- **Shot Categorization**: Uses correct outcome IDs [97, 100, 116] for on target vs [98, 99, 101] for off target
+- **Goalkeeper Saves**: Counts BOTH outcomes [100=Saved, 116=Saved to Post] - corrected from initial plan
+- **Ball Recoveries**: Excludes recovery_failure = True - corrected from initial plan
+- **Tackle Success**: Uses outcome IDs [4, 15, 16, 17] - corrected from initial plan
+- **Penalty Shootout Exclusion**: Period 5 events filtered out
+- **Division by Zero Handling**: Returns None for percentages when denominator is 0
+- **Duplicate Prevention**: Raises error if statistics already exist for match
+- **Decimal Precision**: Numeric(5,2) for percentages, Numeric(8,6) for xG
+- **Manual Testing**: Interactive CLI for verifying calculations with real data
+
+**Critical Corrections from Initial Plan:**
+1. **Possession**: Sum duration field (NOT count sequences) per user specification
+2. **Shot outcomes**: Added missing outcome IDs 99 (Post) and 116 (Saved to Post)
+3. **GK saves**: Count outcomes 100 AND 116 (initial plan only had 100)
+4. **Ball recoveries**: Filter where recovery_failure is NOT True
+5. **Tackle success**: Use outcome IDs [4, 15, 16, 17] instead of string matching
 
 ---
 
