@@ -1635,70 +1635,339 @@ python -m app.services.player_match_statistics_service data/events/7478.json
 
 ---
 
-#### Iteration 11: Club Season Statistics Update ❌
+#### Iteration 11: Club Season Statistics Update ✅ COMPLETED
 
-**Goal:** Recalculate club season aggregates
+**Goal:** Calculate and update club season-level statistics by aggregating match-level data from matches, goals, match_statistics, and player_match_statistics tables
 
-**Function:** `update_club_season_statistics(club_id: UUID) → UUID`
+**Functions:**
 
-**Input:** club_id
+1. **Helper Function (Pure Calculation):**
+   ```python
+   calculate_club_season_statistics(
+       club_id: UUID,
+       db: Session
+   ) -> Dict[str, Any]
+   ```
 
-**Output:** club_stats_id
+2. **Main Function (Database Update):**
+   ```python
+   update_club_season_statistics(
+       db: Session,
+       club_id: UUID
+   ) -> bool
+   ```
+
+**Parameter Sources:**
+- `db`: Database session
+- `club_id`: Club ID (UUID)
+
+**Output:**
+```python
+# Helper returns: Dictionary with all 27 statistics
+{
+    'matches_played': 5,
+    'wins': 3,
+    'draws': 1,
+    'losses': 1,
+    'goals_scored': 10,
+    'goals_conceded': 4,
+    'total_assists': 6,
+    'total_clean_sheets': 2,
+    'team_form': 'WLWDW',  # Most recent on left
+    'avg_goals_per_match': Decimal('2.00'),
+    'avg_goals_conceded_per_match': Decimal('0.80'),
+    # ... 16 more average statistics
+    'pass_completion_rate': Decimal('83.33'),  # Weighted
+    'tackle_success_rate': Decimal('73.33'),  # Weighted
+    'interception_success_rate': Decimal('70.00')  # Weighted from player stats
+}
+
+# Main function returns:
+bool  # True if successful
+```
 
 **Processing:**
-- Aggregate all matches for club
-- Count wins/draws/losses from matches.result
-- Sum goals_scored/goals_conceded
-- Sum assists from player_match_statistics
-- Count clean_sheets (opponent_score = 0)
-- Calculate team_form (last 5 results, most recent first: "WWDLW")
-- Calculate averages from match_statistics (team_type='our_team')
-- Update club_season_statistics record
 
-**Tests:**
-- Test aggregate wins/draws/losses
-- Test goals totals
-- Test assists summation
-- Test clean sheets
-- Test team_form calculation
-- Test averages calculation
+**Helper Function:**
+1. **Basic Counts (from matches table):**
+   - matches_played: COUNT(*)
+   - wins, draws, losses: COUNT by result ('W', 'D', 'L')
+   - total_clean_sheets: COUNT where opponent_score = 0
+
+2. **Goals (from goals table):**
+   - goals_scored: COUNT where is_our_goal = True
+   - goals_conceded: COUNT where is_our_goal = False
+
+3. **Total Assists (from player_match_statistics):**
+   - SUM(assists) across all our team's players
+
+4. **Team Form:**
+   - Last 5 matches ordered by match_date DESC
+   - Concatenate results with most recent on LEFT (e.g., "WLWDW")
+
+5. **Calculated Ratios:**
+   - avg_goals_per_match = goals_scored / matches_played
+   - avg_goals_conceded_per_match = goals_conceded / matches_played
+
+6. **Simple Averages (from match_statistics where team_type='our_team'):**
+   - avg_possession_percentage
+   - avg_total_shots, avg_shots_on_target
+   - avg_xg_per_match
+   - avg_total_passes, avg_final_third_passes
+   - avg_crosses, avg_dribbles, avg_successful_dribbles
+   - avg_tackles, avg_interceptions, avg_ball_recoveries
+   - avg_saves_per_match
+
+7. **Weighted Averages (CRITICAL - not simple averages):**
+   - **pass_completion_rate**: (SUM(passes_completed) / SUM(total_passes)) * 100
+   - **tackle_success_rate**: Back-calculate from match percentages, then SUM(successful) / SUM(total) * 100
+   - **interception_success_rate**: Calculate from player_match_statistics (weighted by player volume)
+
+**Main Function:**
+1. Call helper function to calculate statistics
+2. Check if ClubSeasonStatistics record exists for club
+3. If exists: UPDATE all fields
+4. If not: INSERT new record
+5. Commit transaction
+6. Return True
+
+**Statistics Calculated (27 total):**
+- **Direct Count (9)**: matches_played, wins, draws, losses, goals_scored, goals_conceded, total_assists, total_clean_sheets, team_form
+- **Simple Average (13)**: Most avg_* fields (possession, shots, passes, crosses, dribbles, tackles, interceptions, ball_recoveries, saves)
+- **Calculated Ratio (2)**: avg_goals_per_match, avg_goals_conceded_per_match
+- **Weighted Average (3)**: pass_completion_rate, tackle_success_rate, interception_success_rate
+
+**Tests:** 20 tests (all passing)
+
+**Helper Function Tests (12):**
+- ✅ Test calculates basic counts correctly
+- ✅ Test calculates goals scored and conceded correctly
+- ✅ Test calculates total assists correctly
+- ✅ Test calculates total clean sheets correctly
+- ✅ Test calculates team_form correctly (last 5 matches, most recent on left)
+- ✅ Test calculates simple averages correctly
+- ✅ Test calculates weighted pass completion rate correctly
+- ✅ Test calculates weighted tackle success rate correctly
+- ✅ Test calculates weighted interception success rate from player stats
+- ✅ Test calculates calculated ratios correctly
+- ✅ Test handles club with no matches
+- ✅ Test handles NULL statistics gracefully
+- ✅ Test division by zero protection
+
+**Main Function Tests (7):**
+- ✅ Test creates new record for club with no existing statistics
+- ✅ Test updates existing record when called again (upsert)
+- ✅ Test stores all 27 fields correctly
+- ✅ Test handles NULL values appropriately
+- ✅ Test commits transaction successfully
+- ✅ Test returns True on success
+- ✅ Test handles club with no matches
 
 **Files:**
-- `app/services/season_stats_service.py`
-- `tests/services/test_season_stats_service.py`
+- `app/services/club_season_statistics_service.py` ✅
+- `tests/services/test_club_season_statistics_service.py` ✅
+
+**Key Features:**
+- **Pure Processing Helper**: `calculate_club_season_statistics()` for testability and reusability
+- **Weighted Averages**: Pass completion, tackle success, and interception success use proper weighted calculations (not simple averages)
+- **Team Form Format**: Most recent match on LEFT (e.g., "WLWDW" = latest match was W)
+- **Interception Success**: Calculated from player_match_statistics (user decision)
+- **Upsert Pattern**: Updates existing record or creates new one
+- **NULL Handling**: Gracefully handles missing data, returns None for invalid calculations
+- **Division by Zero Protection**: Returns None when denominator is 0
+- **Database Aggregation**: Uses SQL SUM, AVG, and COUNT for efficient calculation
+- **Decimal Precision**: Numeric(5,2) for percentages, proper rounding
+
+**Critical Implementation Details:**
+1. **Weighted Averages are Essential**: Using simple AVG() on percentages would give incorrect results when matches have different volumes
+2. **Team Form**: Ordered DESC by date, concatenated with most recent first (left to right)
+3. **Interception Success**: Weighted average from player_match_statistics, not from match_statistics
+4. **Back-calculation**: Tackle success requires back-calculating successful tackles from stored percentages
+
+**When to Call:**
+- After each match processing completion (Iteration 10)
+- Part of the match upload workflow
+- Ensures season statistics are always up-to-date
 
 ---
 
-#### Iteration 12: Player Season Statistics Update ❌
+#### Iteration 12: Player Season Statistics Update ✅ COMPLETED
 
-**Goal:** Recalculate player season aggregates
+**Goal:** Calculate and update player season-level statistics by aggregating match-level data from player_match_statistics table
 
-**Function:** `update_player_season_statistics(player_ids: List[UUID]) → int`
+**Functions:**
 
-**Input:** List of player_ids
+1. **Helper Function (Pure Calculation):**
+   ```python
+   calculate_player_season_statistics(
+       player_id: UUID,
+       db: Session
+   ) -> Dict[str, Any]
+   ```
 
-**Output:** Count of players updated
+2. **Main Function (Database Update):**
+   ```python
+   update_player_season_statistics(
+       db: Session,
+       player_ids: List[UUID]
+   ) -> int
+   ```
+
+**Parameter Sources:**
+- `db`: Database session
+- `player_ids`: List of player UUIDs to update
+
+**Output:**
+```python
+# Helper returns: Dictionary with all 17 statistics
+{
+    'matches_played': 10,
+    'goals': 15,
+    'assists': 8,
+    'expected_goals': Decimal('12.5'),
+    'shots_per_game': Decimal('4.50'),
+    'shots_on_target_per_game': Decimal('2.30'),
+    'total_passes': 450,
+    'passes_completed': 380,
+    'total_dribbles': 35,
+    'successful_dribbles': 22,
+    'tackles': 12,
+    'tackle_success_rate': Decimal('75.00'),
+    'interceptions': 8,
+    'interception_success_rate': Decimal('87.50'),
+    'attacking_rating': 85,        # 25-100 scale
+    'technique_rating': 78,        # 25-100 scale
+    'tactical_rating': 72,         # 25-100 scale
+    'defending_rating': 45,        # 25-100 scale
+    'creativity_rating': 80        # 25-100 scale
+}
+
+# Main function returns:
+int  # Number of players updated
+```
 
 **Processing:**
-For each player:
-- Aggregate all player_match_statistics
-- Count matches_played
-- Sum goals, assists, xG
-- Calculate per-game averages
-- Sum totals (passes, dribbles, tackles, etc.)
-- Calculate success rates
-- Calculate attribute ratings (attacking, technique, tactical, defending, creativity)
-- Update player_season_statistics record
 
-**Tests:**
-- Test aggregate statistics
-- Test per-game calculations
-- Test attribute rating formulas
-- Test update existing records
+**Helper Function:**
+1. **Simple Aggregations (11 fields):**
+   - matches_played: COUNT(*)
+   - goals, assists: SUM from player_match_statistics
+   - expected_goals: SUM(expected_goals)
+   - total_passes, passes_completed: SUM aggregations
+   - total_dribbles, successful_dribbles: SUM aggregations
+   - tackles, interceptions: SUM aggregations
+
+2. **Calculated Averages (2 fields):**
+   - shots_per_game = SUM(shots) / matches_played
+   - shots_on_target_per_game = SUM(shots_on_target) / matches_played
+
+3. **Weighted Percentages (2 fields):**
+   - tackle_success_rate: Back-calculate from match percentages (same logic as Iteration 11)
+   - interception_success_rate: Back-calculate from match percentages
+
+4. **Attribute Ratings (5 fields with 25-100 normalization):**
+   - **attacking_rating**: Goals (40%) + Assists (30%) + xG (20%) + Shots/game (10%)
+   - **technique_rating**: Dribble success (40%) + Pass completion (30%) + Shot accuracy (20%) + Dribble volume (10%)
+   - **tactical_rating**: Final third passes (30%) + Total passes (25%) + Pass completion (25%) + Crosses (20%)
+   - **defending_rating**: Tackles (35%) + Interceptions (35%) + Tackle success (20%) + Interception success (10%)
+   - **creativity_rating**: Assists (40%) + Final third passes (30%) + Assist/goal ratio (20%) + Crosses (10%)
+
+5. **Low Match Count Boost:**
+   - Players with <5 matches get up to 50% rating boost
+   - Formula: `boost_factor = 1.0 + (0.10 * (5 - matches_played))`
+   - 4 matches: 1.10x boost, 3 matches: 1.20x, 2 matches: 1.30x, 1 match: 1.50x
+
+6. **Rating Normalization:**
+   - Raw scores (0-1) normalized to 25-100 range
+   - Formula: `int(25 + (raw_score * 75))`
+   - Floor: 25 (minimum baseline for radar chart display)
+   - Ceiling: 100 (maximum cap)
+
+**Main Function:**
+1. For each player_id in list:
+   - Call helper function to calculate statistics
+   - Check if PlayerSeasonStatistics record exists
+   - If exists: UPDATE all fields (upsert)
+   - If not: INSERT new record
+2. Commit transaction
+3. Return count of players updated
+
+**Statistics Calculated (17 total):**
+- **Simple Aggregations (11)**: matches_played, goals, assists, expected_goals, total_passes, passes_completed, total_dribbles, successful_dribbles, tackles, interceptions
+- **Calculated Averages (2)**: shots_per_game, shots_on_target_per_game
+- **Weighted Percentages (2)**: tackle_success_rate, interception_success_rate
+- **Attribute Ratings (5)**: attacking_rating, technique_rating, tactical_rating, defending_rating, creativity_rating
+
+**Tests:** 24 tests (all passing)
+
+**Helper Function Tests (17):**
+- ✅ Test calculates matches_played correctly
+- ✅ Test calculates simple sums correctly (goals, assists, passes, etc.)
+- ✅ Test calculates per-game averages correctly
+- ✅ Test calculates weighted tackle success rate correctly
+- ✅ Test calculates weighted interception success rate correctly
+- ✅ Test handles NULL tackle success rates (treats as 0% success)
+- ✅ Test calculates attacking rating correctly
+- ✅ Test calculates technique rating correctly
+- ✅ Test calculates tactical rating correctly
+- ✅ Test calculates defending rating correctly
+- ✅ Test calculates creativity rating correctly
+- ✅ Test ratings have 25 minimum (baseline for radar chart)
+- ✅ Test ratings have 100 maximum (cap)
+- ✅ Test low match count boost is applied correctly (1-4 matches)
+- ✅ Test handles player with no matches
+- ✅ Test handles NULL statistics gracefully
+- ✅ Test division by zero protection
+
+**Main Function Tests (7):**
+- ✅ Test creates new record for player with no existing statistics
+- ✅ Test updates existing record when called again (upsert)
+- ✅ Test processes multiple players correctly (batch update)
+- ✅ Test commits transaction successfully
+- ✅ Test stores all 17 fields correctly
+- ✅ Test handles NULL/zero values appropriately
+- ✅ Test returns correct count of players updated
 
 **Files:**
-- `app/services/season_stats_service.py` (extend)
-- `tests/services/test_season_stats_service.py` (extend)
+- `app/services/player_season_statistics_service.py` ✅
+- `tests/services/test_player_season_statistics_service.py` ✅
+
+**Key Features:**
+- **Pure Processing Helper**: `calculate_player_season_statistics()` for testability and reusability
+- **Position-Independent Ratings**: Same formula for all positions (user decision)
+- **Rating Range**: 25-100 scale (25 minimum for radar chart display)
+- **Low Match Count Boost**: Up to 50% boost for players with <5 matches prevents weak radar chart display
+- **Weighted Percentages**: Tackle and interception success use proper weighted calculations (back-calculated from match-level percentages)
+- **Upsert Pattern**: Updates existing record or creates new one
+- **Batch Processing**: Processes multiple players in a single call
+- **NULL Handling**: Gracefully handles missing data, returns None for invalid calculations
+- **Division by Zero Protection**: Returns None when denominator is 0
+- **Database Aggregation**: Uses SQL SUM, COUNT for efficient calculation
+- **Decimal Precision**: Numeric(5,2) for percentages, Numeric(8,6) for xG
+
+**Critical Implementation Details:**
+1. **Rating Normalization**: `25 + (raw_score * 75)` ensures ratings range from 25-100
+2. **Match Count Boost**: Applied before normalization to prevent low ratings for new players
+3. **Weighted Averages**: Back-calculation from match percentages (not simple averages)
+4. **Radar Chart Friendly**: 25 minimum ensures charts always display well
+
+**When to Call:**
+- After each match processing completion (Iteration 10)
+- Called AFTER Iteration 11 (club_season_statistics update)
+- Part of the match upload workflow
+- Ensures player season statistics are always up-to-date
+
+**Workflow Integration:**
+```
+1. Upload match →
+2. Process events →
+3. Insert match record →
+4. Insert goals →
+5. Insert match_statistics →
+6. Insert player_match_statistics →
+7. UPDATE club_season_statistics ← (Iteration 11)
+8. UPDATE player_season_statistics ← (Iteration 12) - for all players in match
+```
 
 ---
 
