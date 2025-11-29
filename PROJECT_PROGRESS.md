@@ -1971,53 +1971,107 @@ int  # Number of players updated
 
 ---
 
-#### Final Integration: Match Processor ❌
+#### Final Integration: Match Processor ✅
 
-**Goal:** Orchestrate all iterations into single transaction
+**Status:** COMPLETE - All 23 tests passing
 
-**Function:** `process_match_upload(coach_id: UUID, match_data: dict) → dict`
+**Goal:** Orchestrate all 12 iterations into single transactional pipeline
+
+**Function:** `process_match_upload(db: Session, coach_id: UUID, match_data: dict) → dict`
+
+**Implementation:** `app/services/match_processor.py`
 
 **Input:**
-- coach_id (from JWT)
-- match_data (opponent_name, match_date, our_score, opponent_score, statsbomb_events)
+- `db`: SQLAlchemy database session
+- `coach_id`: UUID (from JWT token)
+- `match_data`: Dictionary with:
+  - `opponent_name`: str (required)
+  - `opponent_logo_url`: str (optional)
+  - `match_date`: str YYYY-MM-DD (required)
+  - `our_score`: int (required, >= 0)
+  - `opponent_score`: int (required, >= 0)
+  - `statsbomb_events`: List[dict] (required)
 
 **Output:**
 ```python
 {
-  'success': bool,
-  'match_id': UUID,
+  'success': True,
+  'match_id': str,  # UUID as string
   'summary': {
-    'events_processed': int,
-    'goals_extracted': int,
-    'players_created': int,
-    'players_updated': int,
+    'opponent_club_id': str,
+    'our_players_processed': int,
+    'our_players_created': int,
+    'our_players_updated': int,
+    'opponent_players_processed': int,
+    'opponent_players_created': int,
+    'opponent_players_updated': int,
     'lineups_created': int,
-    'warnings': List[str]
+    'events_inserted': int,
+    'goals_inserted': int,
+    'match_statistics_created': int,
+    'player_statistics_created': int,
+    'club_statistics_updated': bool,
+    'player_season_statistics_updated': int
   },
-  'new_players': List[dict]
+  'details': {
+    'team_identification': {...},
+    'our_players': [...],
+    'opponent_players': [...]
+  }
 }
 ```
 
-**Processing:**
-1. Authenticate coach and get club_id
-2. Identify teams (Iteration 1)
-3. Get/create opponent club (Iteration 2)
-4. Create match record (Iteration 3)
-5. Extract our players (Iteration 4)
-6. Extract opponent players (Iteration 5)
-7. Create match lineups (Iteration 6)
-8. Insert events (Iteration 7)
-9. Extract goals (Iteration 8)
-10. Calculate match statistics (Iteration 9)
-11. Calculate player statistics (Iteration 10)
-12. Update club season stats (Iteration 11)
-13. Update player season stats (Iteration 12)
+**Processing Pipeline:**
+1. **Input Validation** - Validate all required fields and formats
+2. **Coach & Club Lookup** - Retrieve coach and club from database
+3. **Iteration 1:** Team Identification - Identify our team and opponent team IDs
+4. **Iteration 2:** Opponent Club - Get or create opponent club record
+5. **Iteration 3:** Match Record - Create match with score validation
+6. **Iteration 4:** Our Players - Extract and upsert our team players
+7. **Iteration 5:** Opponent Players - Extract and upsert opponent players
+8. **Iteration 6:** Match Lineups - Create lineup records (22 players)
+9. **Iteration 7:** Events - Insert filtered events to database
+10. **Iteration 8:** Goals - Extract and insert goal records
+11. **Iteration 9:** Match Statistics - Calculate team-level match stats
+12. **Iteration 10:** Player Match Statistics - Calculate player-level match stats
+13. **Iteration 11:** Club Season Statistics - Update club season aggregates
+14. **Iteration 12:** Player Season Statistics - Update player season aggregates
 
-All wrapped in database transaction (rollback on any error)
+**Transaction Management:**
+- Single `db.commit()` after all 12 iterations complete
+- `db.rollback()` on any error ensures atomicity
+- Each iteration wrapped in try/except with iteration identification
+- Error messages include iteration number for debugging
 
-**Tests:**
-- Integration test with sample data subset
-- End-to-end test with full 15946.json
+**Manual Data Entry CLI:**
+- JWT authentication for coach identification
+- Loads StatsBomb events from JSON file
+- Interactive prompts for match details
+- Uses actual PostgreSQL database
+- Located at bottom of match_processor.py
+
+**Tests:** 23 comprehensive tests passing
+- 6 input validation tests
+- 3 helper function tests
+- 2 extract match data tests
+- 4 integration tests (first match, subsequent match, return structure, optional fields)
+- 5 error handling and rollback tests
+- 3 edge case tests
+
+**Files Created:**
+- `app/services/match_processor.py` - Main service (450+ lines)
+- `tests/services/test_match_processor.py` - Test suite (590+ lines)
+
+**Key Features:**
+✅ Orchestrates all 12 iterations into cohesive workflow
+✅ Proper transaction management with rollback
+✅ Error messages identify which iteration failed
+✅ No warnings in return structure (clean output)
+✅ Testing CLI for manual data entry
+✅ UUIDs properly converted to strings for JSON
+✅ Player IDs correctly extracted for season statistics
+✅ First match vs subsequent match handling
+- End-to-end test with full data/france771.json
 - Test transaction rollback on error
 - Test all summary fields populated
 
