@@ -1579,7 +1579,29 @@ python -m app.services.player_match_statistics_service data/events/7478.json
 # - Extracts player names from events
 # - Displays each player's name and StatsBomb ID
 # - Shows ALL 17 statistics for every player (zeros displayed for stats with no value)
+# - Only stored percentages shown (tackle_success_rate, interception_success_rate)
 # - Percentages shown as "N/A" when no data available
+
+# Example output per player:
+# Lionel Messi (StatsBomb ID: 5503)
+# --------------------------------------------------------------------------------
+#   Goals:                        2
+#   Assists:                      1
+#   Expected Goals (xG):          1.85
+#   Shots:                        8
+#   Shots on Target:              5
+#   Total Passes:                 67
+#   Completed Passes:             58
+#   Short Passes (≤30m):          45
+#   Long Passes (>30m):           22
+#   Final Third Passes:           18
+#   Crosses:                      3
+#   Total Dribbles:               12
+#   Successful Dribbles:          9
+#   Tackles:                      2
+#   Tackle Success Rate:          50.00%
+#   Interceptions:                0
+#   Interception Success Rate:    N/A
 ```
 
 **Files:**
