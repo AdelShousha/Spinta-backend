@@ -883,8 +883,8 @@ class TestUpdateClubSeasonStatistics:
         assert stats.avg_goals_per_match is None
         assert stats.avg_goals_conceded_per_match is None
 
-    def test_commits_transaction_successfully(self, session: Session):
-        """Test that the function commits the transaction to the database."""
+    def test_flushes_data_to_session(self, session: Session):
+        """Test that the function flushes data to the session (caller manages commit)."""
         # Setup
         club = create_test_club(session)
         opponent = create_test_opponent(session)
@@ -902,17 +902,16 @@ class TestUpdateClubSeasonStatistics:
         # Assert
         assert result is True
 
-        # Rollback the session to simulate a new session
-        session.rollback()
-
-        # Query again - if committed, data should still be there
-        # Note: In our test environment with session fixture, this verifies the commit happened
-        stats = session.query(ClubSeasonStatistics).filter_by(club_id=club.club_id).first()
-        # Since we're using the same session and it was committed, we need to query fresh
-        # The fact that we can query it means it was committed
-        session.expire_all()
+        # Verify data is flushed and queryable in the same session
         stats = session.query(ClubSeasonStatistics).filter_by(club_id=club.club_id).first()
         assert stats is not None
+        assert stats.matches_played == 1
+        assert stats.wins == 1
+
+        # After rollback, data should NOT be there (proves it wasn't committed, only flushed)
+        session.rollback()
+        stats = session.query(ClubSeasonStatistics).filter_by(club_id=club.club_id).first()
+        assert stats is None  # Data is gone because it was only flushed, not committed
 
     def test_returns_true_on_success(self, session: Session):
         """Test that the function returns True when successful."""

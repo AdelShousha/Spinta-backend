@@ -166,8 +166,8 @@ def create_match_record(
     )
 
     db.add(match)
-    db.commit()
-    db.refresh(match)
+    db.flush()  # Flush to database without committing (caller manages transaction)
+
 
     return match.match_id
 

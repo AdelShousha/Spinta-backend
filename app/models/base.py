@@ -14,6 +14,7 @@ from sqlalchemy import Column, DateTime, String, TypeDecorator, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 import uuid
+from datetime import datetime, timezone
 
 
 class GUID(TypeDecorator):
@@ -116,15 +117,15 @@ class TimestampMixin:
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=func.now(),  # PostgreSQL NOW() function
+        default=lambda: datetime.now(timezone.utc),  # Client-side generation for flush() compatibility
         comment="Timestamp when record was created"
     )
 
     updated_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),  # Automatically update on record modification
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),  # Automatically update on record modification
         comment="Timestamp when record was last updated"
     )
 

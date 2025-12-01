@@ -244,8 +244,8 @@ def extract_our_players(
                 'invite_code': new_player.invite_code
             })
 
-    # Commit all changes at once
-    db.commit()
+    # Flush all changes (caller manages commit)
+    db.flush()
 
     return {
         'players_processed': len(processed_players),
@@ -397,8 +397,8 @@ def extract_opponent_players(
                 'position': new_player.position
             })
 
-    # Commit all changes at once
-    db.commit()
+    # Flush all changes (caller manages commit)
+    db.flush()
 
     return {
         'players_processed': len(processed_players),

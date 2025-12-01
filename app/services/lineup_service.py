@@ -263,8 +263,8 @@ def create_match_lineups(
             f"Expected 22 lineup records, created {total_count}"
         )
 
-    # Commit all lineup records
-    db.commit()
+    # Flush all lineup records (caller manages commit)
+    db.flush()
 
     return {
         'lineups_created': total_count,

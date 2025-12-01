@@ -135,8 +135,8 @@ def insert_goals(
         db.add(goal_record)
         goal_count += 1
 
-    # Step 4: Commit all goals
-    db.commit()
+    # Step 4: Flush all goals (caller manages commit)
+    db.flush()
 
     return goal_count
 

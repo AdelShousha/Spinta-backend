@@ -283,8 +283,8 @@ def update_club_season_statistics(db: Session, club_id: UUID) -> bool:
         )
         db.add(new_stats)
 
-    # Commit transaction
-    db.commit()
+    # Flush changes (caller manages commit)
+    db.flush()
 
     return True
 

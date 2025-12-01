@@ -200,8 +200,8 @@ def update_player_season_statistics(db: Session, player_ids: List[UUID]) -> int:
 
         count += 1
 
-    # Commit transaction
-    db.commit()
+    # Flush changes (caller manages commit)
+    db.flush()
 
     return count
 

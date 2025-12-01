@@ -389,8 +389,8 @@ def insert_player_match_statistics(
         db.add(player_match_stats)
         inserted_count += 1
 
-    # 7. Commit transaction
-    db.commit()
+    # 7. Flush changes (caller manages commit)
+    db.flush()
 
     return inserted_count
 

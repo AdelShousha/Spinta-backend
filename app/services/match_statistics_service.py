@@ -359,8 +359,8 @@ def insert_match_statistics(
     db.add(our_team_stats)
     db.add(opponent_team_stats)
 
-    # Step 6: Commit transaction
-    db.commit()
+    # Step 6: Flush changes (caller manages commit)
+    db.flush()
 
     return 2
 

@@ -13,6 +13,7 @@ Key Features:
 from sqlalchemy import Column, String, Integer, DateTime, Text, func
 from sqlalchemy.orm import relationship
 from app.models.base import Base, GUID, generate_uuid
+from datetime import datetime, timezone
 
 
 class OpponentClub(Base):
@@ -67,7 +68,7 @@ class OpponentClub(Base):
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
         comment="Timestamp when record was created"
     )
 

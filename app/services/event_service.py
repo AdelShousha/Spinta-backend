@@ -191,12 +191,12 @@ def insert_events(
         db.add(event_record)
         event_count += 1
 
-        # Commit every 500 events
+        # Flush every 500 events (better memory management)
         if (i + 1) % batch_size == 0:
-            db.commit()
+            db.flush()
 
-    # Final commit for remaining events
-    db.commit()
+    # Final flush for remaining events (caller manages commit)
+    db.flush()
 
     return event_count
 

@@ -45,8 +45,7 @@ def get_or_create_opponent_club(
         if opponent_club.logo_url != logo_url:
             opponent_club.logo_url = logo_url
 
-        db.commit()
-        db.refresh(opponent_club)
+        db.flush()  # Flush changes without committing (caller manages transaction)
 
         return opponent_club.opponent_club_id
 
@@ -59,7 +58,6 @@ def get_or_create_opponent_club(
         )
 
         db.add(new_opponent_club)
-        db.commit()
-        db.refresh(new_opponent_club)
+        db.flush()  # Flush to database without committing (caller manages transaction)
 
         return new_opponent_club.opponent_club_id
