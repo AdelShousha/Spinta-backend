@@ -10,7 +10,7 @@ Key Concepts:
 - Database connection is initialized on startup
 """
 
-from app.api.routes import health, auth
+from app.api.routes import health, auth, coach
 from app import __version__
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,3 +99,4 @@ async def root():
 # Include routes from other modules
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(coach.router, prefix="/api/coach", tags=["Coach"])
