@@ -60,7 +60,7 @@ def count_goals_from_events(
             continue
 
         # Determine which team scored based on possession_team.id
-        possession_team_id = event.get('possession_team', {}).get('id')
+        possession_team_id = event.get('team', {}).get('id')
 
         if possession_team_id == our_club_statsbomb_team_id:
             our_goals += 1

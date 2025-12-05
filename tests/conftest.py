@@ -267,3 +267,18 @@ def sample_complete_player(session, sample_club, sample_player_user):
     session.commit()
     session.refresh(player)
     return player
+
+
+# Import additional fixtures from coach_fixtures
+from tests.fixtures.coach_fixtures import (
+    sample_opponent_club,
+    sample_match,
+    sample_goals,
+    sample_match_statistics,
+    sample_lineups,
+    sample_player_match_statistics,
+    sample_club_season_statistics,
+    sample_player_season_statistics,
+    sample_training_plan,
+    sample_training_plan_empty
+)
