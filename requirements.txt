@@ -2,6 +2,7 @@ alembic==1.13.1
 annotated-types==0.7.0
 anyio==4.11.0
 bcrypt==5.0.0
+mangum==0.17.0
 black==23.12.1
 certifi==2025.11.12
 cffi==2.0.0

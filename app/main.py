@@ -45,14 +45,18 @@ async def lifespan(app: FastAPI):
             result = conn.execute(text("SELECT 1"))
             print("✅ Database connection successful!")
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
-        raise
+        print(f"⚠️ Database connection failed: {e}")
+        print("⚠️ Application will start but database operations may fail")
+        # Don't raise in serverless - let the app start
 
     yield  # Application runs here
 
     # SHUTDOWN
     print("👋 Shutting down gracefully...")
-    engine.dispose()  # Close all database connections
+    try:
+        engine.dispose()  # Close all database connections
+    except Exception as e:
+        print(f"⚠️ Error during shutdown: {e}")
 
 
 # Create FastAPI Application
