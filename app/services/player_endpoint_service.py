@@ -31,6 +31,23 @@ from app.services.coach_service import calculate_age
 
 
 # ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def _default_zero(value: Any) -> Any:
+    """
+    Convert None to 0 for numeric stats.
+
+    Args:
+        value: The value to check
+
+    Returns:
+        The original value if not None, otherwise 0
+    """
+    return value if value is not None else 0
+
+
+# ============================================================================
 # OWNERSHIP VERIFICATION FUNCTIONS
 # ============================================================================
 
@@ -182,36 +199,36 @@ def get_player_dashboard(db: Session, player_id: UUID) -> Dict[str, Any]:
             "profile_image_url": player.profile_image_url
         },
         "attributes": {
-            "attacking_rating": season_stats.attacking_rating if season_stats else None,
-            "technique_rating": season_stats.technique_rating if season_stats else None,
-            "creativity_rating": season_stats.creativity_rating if season_stats else None,
-            "tactical_rating": season_stats.tactical_rating if season_stats else None,
-            "defending_rating": season_stats.defending_rating if season_stats else None
+            "attacking_rating": _default_zero(season_stats.attacking_rating if season_stats else None),
+            "technique_rating": _default_zero(season_stats.technique_rating if season_stats else None),
+            "creativity_rating": _default_zero(season_stats.creativity_rating if season_stats else None),
+            "tactical_rating": _default_zero(season_stats.tactical_rating if season_stats else None),
+            "defending_rating": _default_zero(season_stats.defending_rating if season_stats else None)
         },
         "season_statistics": {
             "general": {
-                "matches_played": season_stats.matches_played if season_stats else 0
+                "matches_played": _default_zero(season_stats.matches_played if season_stats else None)
             },
             "attacking": {
                 "goals": season_stats.goals if season_stats else 0,
                 "assists": season_stats.assists if season_stats else 0,
-                "expected_goals": float(season_stats.expected_goals) if season_stats and season_stats.expected_goals else None,
-                "shots_per_game": float(season_stats.shots_per_game) if season_stats and season_stats.shots_per_game else None,
-                "shots_on_target_per_game": float(season_stats.shots_on_target_per_game) if season_stats and season_stats.shots_on_target_per_game else None
+                "expected_goals": float(_default_zero(season_stats.expected_goals if season_stats else None)),
+                "shots_per_game": float(_default_zero(season_stats.shots_per_game if season_stats else None)),
+                "shots_on_target_per_game": float(_default_zero(season_stats.shots_on_target_per_game if season_stats else None))
             },
             "passing": {
-                "total_passes": season_stats.total_passes if season_stats else None,
-                "passes_completed": season_stats.passes_completed if season_stats else None
+                "total_passes": _default_zero(season_stats.total_passes if season_stats else None),
+                "passes_completed": _default_zero(season_stats.passes_completed if season_stats else None)
             },
             "dribbling": {
-                "total_dribbles": season_stats.total_dribbles if season_stats else None,
-                "successful_dribbles": season_stats.successful_dribbles if season_stats else None
+                "total_dribbles": _default_zero(season_stats.total_dribbles if season_stats else None),
+                "successful_dribbles": _default_zero(season_stats.successful_dribbles if season_stats else None)
             },
             "defending": {
-                "tackles": season_stats.tackles if season_stats else None,
-                "tackle_success_rate": float(season_stats.tackle_success_rate) if season_stats and season_stats.tackle_success_rate else None,
-                "interceptions": season_stats.interceptions if season_stats else None,
-                "interception_success_rate": float(season_stats.interception_success_rate) if season_stats and season_stats.interception_success_rate else None
+                "tackles": _default_zero(season_stats.tackles if season_stats else None),
+                "tackle_success_rate": float(_default_zero(season_stats.tackle_success_rate if season_stats else None)),
+                "interceptions": _default_zero(season_stats.interceptions if season_stats else None),
+                "interception_success_rate": float(_default_zero(season_stats.interception_success_rate if season_stats else None))
             }
         }
     }
@@ -340,25 +357,25 @@ def get_player_match_detail(
             "attacking": {
                 "goals": player_stats.goals or 0,
                 "assists": player_stats.assists or 0,
-                "xg": float(player_stats.expected_goals) if player_stats.expected_goals else None,
-                "total_shots": player_stats.shots,
-                "shots_on_target": player_stats.shots_on_target,
-                "total_dribbles": player_stats.total_dribbles,
-                "successful_dribbles": player_stats.successful_dribbles
+                "xg": float(_default_zero(player_stats.expected_goals)),
+                "total_shots": _default_zero(player_stats.shots),
+                "shots_on_target": _default_zero(player_stats.shots_on_target),
+                "total_dribbles": _default_zero(player_stats.total_dribbles),
+                "successful_dribbles": _default_zero(player_stats.successful_dribbles)
             },
             "passing": {
-                "total_passes": player_stats.total_passes,
-                "passes_completed": player_stats.completed_passes,
-                "short_passes": player_stats.short_passes,
-                "long_passes": player_stats.long_passes,
-                "final_third": player_stats.final_third_passes,
-                "crosses": player_stats.crosses
+                "total_passes": _default_zero(player_stats.total_passes),
+                "passes_completed": _default_zero(player_stats.completed_passes),
+                "short_passes": _default_zero(player_stats.short_passes),
+                "long_passes": _default_zero(player_stats.long_passes),
+                "final_third": _default_zero(player_stats.final_third_passes),
+                "crosses": _default_zero(player_stats.crosses)
             },
             "defending": {
-                "tackles": player_stats.tackles,
-                "tackle_success_rate": float(player_stats.tackle_success_rate) if player_stats.tackle_success_rate else None,
-                "interceptions": player_stats.interceptions,
-                "interception_success_rate": float(player_stats.interception_success_rate) if player_stats.interception_success_rate else None
+                "tackles": _default_zero(player_stats.tackles),
+                "tackle_success_rate": float(_default_zero(player_stats.tackle_success_rate)),
+                "interceptions": _default_zero(player_stats.interceptions),
+                "interception_success_rate": float(_default_zero(player_stats.interception_success_rate))
             }
         }
     }

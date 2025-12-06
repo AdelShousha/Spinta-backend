@@ -279,9 +279,9 @@ class TestGetPlayerDashboard:
             sample_complete_player.player_id
         )
 
-        # Then: Returns with empty/default statistics
+        # Then: Returns with empty/default statistics (all 0)
         assert result["player"]["player_id"] == str(sample_complete_player.player_id)
-        assert result["attributes"]["attacking_rating"] is None
+        assert result["attributes"]["attacking_rating"] == 0
         assert result["season_statistics"]["general"]["matches_played"] == 0
 
     def test_get_dashboard_player_not_found(self, session):
