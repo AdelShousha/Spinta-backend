@@ -282,3 +282,9 @@ from tests.fixtures.coach_fixtures import (
     sample_training_plan,
     sample_training_plan_empty
 )
+
+# Import player fixtures
+from tests.fixtures.player_fixtures import (
+    auth_headers_player,
+    auth_headers_coach_for_player_tests
+)

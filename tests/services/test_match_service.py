@@ -14,8 +14,8 @@ from app.models.match import Match
 
 def create_shot_event(
     event_id: str,
-    possession_team_id: int,
-    possession_team_name: str,
+    team_id: int,
+    team_name: str,
     outcome_id: int,
     outcome_name: str
 ) -> dict:
@@ -23,7 +23,7 @@ def create_shot_event(
     return {
         "id": event_id,
         "type": {"id": 16, "name": "Shot"},
-        "possession_team": {"id": possession_team_id, "name": possession_team_name},
+        "team": {"id": team_id, "name": team_name},
         "shot": {
             "outcome": {"id": outcome_id, "name": outcome_name}
         }
@@ -146,14 +146,14 @@ class TestCountGoalsFromEvents:
                 "id": "goal-1",
                 "period": 1,
                 "type": {"id": 16, "name": "Shot"},
-                "possession_team": {"id": 779, "name": "Argentina"},
+                "team": {"id": 779, "name": "Argentina"},
                 "shot": {"outcome": {"id": 97, "name": "Goal"}}
             },
             {
                 "id": "goal-2",
                 "period": 2,
                 "type": {"id": 16, "name": "Shot"},
-                "possession_team": {"id": 792, "name": "Australia"},
+                "team": {"id": 792, "name": "Australia"},
                 "shot": {"outcome": {"id": 97, "name": "Goal"}}
             },
             # Penalty shootout goals (period 5) - should NOT be counted
@@ -161,7 +161,7 @@ class TestCountGoalsFromEvents:
                 "id": "penalty-1",
                 "period": 5,
                 "type": {"id": 16, "name": "Shot"},
-                "possession_team": {"id": 779, "name": "Argentina"},
+                "team": {"id": 779, "name": "Argentina"},
                 "shot": {
                     "type": {"id": 88, "name": "Penalty"},
                     "outcome": {"id": 97, "name": "Goal"}
@@ -171,7 +171,7 @@ class TestCountGoalsFromEvents:
                 "id": "penalty-2",
                 "period": 5,
                 "type": {"id": 16, "name": "Shot"},
-                "possession_team": {"id": 792, "name": "Australia"},
+                "team": {"id": 792, "name": "Australia"},
                 "shot": {
                     "type": {"id": 88, "name": "Penalty"},
                     "outcome": {"id": 97, "name": "Goal"}
@@ -181,7 +181,7 @@ class TestCountGoalsFromEvents:
                 "id": "penalty-3",
                 "period": 5,
                 "type": {"id": 16, "name": "Shot"},
-                "possession_team": {"id": 779, "name": "Argentina"},
+                "team": {"id": 779, "name": "Argentina"},
                 "shot": {
                     "type": {"id": 88, "name": "Penalty"},
                     "outcome": {"id": 97, "name": "Goal"}
