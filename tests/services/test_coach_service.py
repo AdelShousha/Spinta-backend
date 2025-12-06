@@ -936,8 +936,8 @@ class TestGetPlayerDetail:
             sample_club.club_id
         )
 
-        # Then: Statistics show defaults
-        assert result["attributes"]["attacking_rating"] is None
+        # Then: Statistics show defaults (all 0)
+        assert result["attributes"]["attacking_rating"] == 0
         assert result["season_statistics"]["general"]["matches_played"] == 0
 
     def test_get_player_detail_with_matches(
