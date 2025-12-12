@@ -2202,7 +2202,7 @@ For each endpoint:
 
 ---
 
-### ❌ Phase 5: Implement Player Endpoints (NOT STARTED)
+###  ✅ Phase 5: Implement Player Endpoints 
 
 **Total: 7 endpoints**
 
@@ -2215,13 +2215,13 @@ For each endpoint:
 
 **Endpoints to Implement:**
 
-1. [ ] GET /api/player/dashboard
-2. [ ] GET /api/player/matches
-3. [ ] GET /api/player/matches/{match_id}
-4. [ ] GET /api/player/training
-5. [ ] GET /api/player/training/{plan_id}
-6. [ ] PUT /api/player/training/exercises/{exercise_id}/toggle
-7. [ ] GET /api/player/profile
+1. [X] GET /api/player/dashboard
+2. [X] GET /api/player/matches
+3. [X] GET /api/player/matches/{match_id}
+4. [X] GET /api/player/training
+5. [X] GET /api/player/training/{plan_id}
+6. [x] PUT /api/player/training/exercises/{exercise_id}/toggle
+7. [x] GET /api/player/profile
 
 **Files to Create:**
 
@@ -2247,9 +2247,9 @@ Spinta_Backend/
 │   │       ├── __init__.py
 │   │       ├── health.py ✅
 │   │       ├── auth.py ✅
-│   │       ├── coach.py ❌
-│   │       ├── player.py ❌
-│   │       └── admin.py ❌
+│   │       ├── coach.py ✅
+│   │       ├── player.py ✅
+│   │    
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── security.py ✅
@@ -2258,11 +2258,8 @@ Spinta_Backend/
 │   │   ├── __init__.py
 │   │   ├── user.py ✅
 │   │   ├── coach.py ✅
-│   │   ├── club.py ✅
 │   │   ├── player.py ✅
-│   │   ├── match.py ❌
-│   │   ├── statistics.py ❌
-│   │   └── training.py ❌
+│   │   
 │   ├── models/
 │   │   ├── __init__.py ✅
 │   │   ├── base.py ✅
@@ -2285,13 +2282,8 @@ Spinta_Backend/
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── auth.py ✅
-│   │   ├── user.py ✅
 │   │   ├── coach.py ✅
-│   │   ├── club.py ✅
 │   │   ├── player.py ✅
-│   │   ├── match.py ❌
-│   │   ├── statistics.py ❌
-│   │   └── training.py ❌
 │   ├── services/ ❌
 │   │   ├── __init__.py
 │   │   ├── match_processor.py ❌
