@@ -20,7 +20,7 @@ import os
 from typing import List, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-import google.generativeai as genai
+from google import genai
 
 
 class PgVectorRAGService:
@@ -29,7 +29,7 @@ class PgVectorRAGService:
     def __init__(
         self,
         db_session: Session,
-        embedding_model: str = "models/text-embedding-004",
+        embedding_model: str = "text-embedding-004",
         top_k: int = 5,
         gemini_api_key: Optional[str] = None
     ):
@@ -49,7 +49,7 @@ class PgVectorRAGService:
         self.embedding_model = embedding_model
         self.top_k = top_k
 
-        # Configure Gemini for embeddings
+        # Configure Gemini client
         api_key = gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError(
@@ -57,7 +57,7 @@ class PgVectorRAGService:
                 "Set it in your .env file or pass it to the constructor."
             )
 
-        genai.configure(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
 
     def _get_query_embedding(self, query: str) -> List[float]:
         """
@@ -74,13 +74,15 @@ class PgVectorRAGService:
             parameter to match the 768 dimensions stored in database.
         """
         try:
-            result = genai.embed_content(
+            result = self.client.models.embed_content(
                 model=self.embedding_model,
-                content=query,
-                task_type="RETRIEVAL_QUERY",
-                output_dimensionality=768  # Match stored embeddings
+                contents=query,
+                config={
+                    "task_type": "RETRIEVAL_QUERY",
+                    "output_dimensionality": 768  # Match stored embeddings
+                }
             )
-            return result['embedding']
+            return result.embeddings[0].values
 
         except Exception as e:
             print(f"Error generating embedding for query '{query}': {e}")
