@@ -1,0 +1,73 @@
+# Python virtual environment
+.venv
+venv
+env
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+*.coverage
+.tox
+.hypothesis
+
+# Development files
+tests/
+docs/
+scripts/
+data/
+
+# Alembic migrations (not needed at runtime)
+alembic/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!requirements.txt
+
+# Development requirements
+requirements-dev.txt
+
+# Local database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Node modules (if any)
+node_modules/
+
+# Vercel
+.vercel
