@@ -62,3 +62,6 @@ dmypy.json
 
 # Vercel
 .vercel
+
+ai-chatbot/
+ai-training-plans/

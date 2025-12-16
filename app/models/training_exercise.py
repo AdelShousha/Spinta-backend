@@ -6,7 +6,7 @@ Stores individual exercises within training plans.
 Key Features:
 - Part of a training plan
 - Completion tracking by player
-- Flexible parameters (sets, reps, duration stored as strings)
+- Numeric parameters (sets, reps, duration as integers)
 """
 
 from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Index, Text, Boolean
@@ -25,9 +25,9 @@ class TrainingExercise(Base, TimestampMixin):
         plan_id: Foreign key to training plan (CASCADE on delete)
         exercise_name: Name of the exercise
         description: Exercise description/instructions
-        sets: Number of sets (string for flexibility)
-        reps: Number of reps (string for flexibility)
-        duration_minutes: Duration in minutes (string for flexibility)
+        sets: Number of sets (integer)
+        reps: Number of reps (integer)
+        duration_minutes: Duration in minutes (integer)
         exercise_order: Display order within the plan
         completed: Has player completed this exercise?
         completed_at: When player marked it complete
@@ -70,21 +70,21 @@ class TrainingExercise(Base, TimestampMixin):
     )
 
     sets = Column(
-        String(20),
+        Integer,
         nullable=True,
-        comment="Number of sets (string for flexibility)"
+        comment="Number of sets"
     )
 
     reps = Column(
-        String(20),
+        Integer,
         nullable=True,
-        comment="Number of reps (string for flexibility)"
+        comment="Number of reps"
     )
 
     duration_minutes = Column(
-        String(20),
+        Integer,
         nullable=True,
-        comment="Duration in minutes (string for flexibility)"
+        comment="Duration in minutes"
     )
 
     exercise_order = Column(

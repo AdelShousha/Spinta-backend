@@ -12,7 +12,7 @@ Key Concepts:
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     # Generate with: openssl rand -hex 32
     secret_key: str
     algorithm: str = "HS256"  # JWT algorithm (HS256 is standard)
+
+    # Google Gemini AI Configuration
+    # Used for AI training plan generation and embeddings
+    # Get your API key from: https://aistudio.google.com/apikey
+    gemini_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias="GEMINI_API_KEY"
+    )
 
     # CORS Configuration
     # Stored as comma-separated string in .env file
@@ -102,3 +110,4 @@ if settings.debug:
         f"📊 Database: {settings.database_url.split('@')[1] if '@' in settings.database_url else 'Not configured'}")
     print(f"🔒 JWT Algorithm: {settings.algorithm}")
     print(f"🌐 CORS Origins: {settings.cors_origins}")
+    print(f"🤖 Gemini API Key: {'✅ Configured' if settings.gemini_api_key else '❌ Not configured'}")

@@ -1,0 +1,21 @@
+# Development-only dependencies
+# NOT needed for Vercel deployment
+#
+# Install with: pip install -r requirements-dev.txt
+#
+# These packages are used for:
+# - Local knowledge base ingestion (scripts/ingest_knowledge_base.py)
+# - Pre-computing embeddings before deployment
+#
+# Note: These packages are too large for Vercel's 250MB limit and are
+#       not needed in production since embeddings are pre-computed.
+
+# Sentence Transformers for local embedding generation
+# Used by: scripts/ingest_knowledge_base.py
+# Uses model: all-mpnet-base-v2 (768 dimensions to match Google text-embedding-004)
+# Size: ~500MB with model weights
+sentence-transformers==3.3.1
+
+# PDF parsing for knowledge base ingestion
+# Used by: scripts/ingest_knowledge_base.py
+pypdf==5.1.0

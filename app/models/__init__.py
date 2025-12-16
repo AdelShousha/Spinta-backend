@@ -41,6 +41,8 @@ from app.models.player_season_statistics import PlayerSeasonStatistics
 from app.models.training_plan import TrainingPlan
 from app.models.training_exercise import TrainingExercise
 
+from app.models.knowledge_embedding import KnowledgeEmbedding
+
 # allow clean imports from app.models
 # Instead of this:
 # from app.models.user import User
@@ -68,4 +70,5 @@ __all__ = [
     "PlayerSeasonStatistics",
     "TrainingPlan",
     "TrainingExercise",
+    "KnowledgeEmbedding",
 ]

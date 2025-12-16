@@ -988,13 +988,13 @@ def get_player_match_stats(
 # TRAINING PLAN SERVICES
 # ============================================================================
 
-def generate_ai_training_plan(
+async def generate_ai_training_plan(
     db: Session,
     player_id: UUID,
     club_id: UUID
 ) -> Dict[str, Any]:
     """
-    Generate AI training plan (stub implementation).
+    Generate AI-powered training plan using Pydantic AI and RAG.
 
     Args:
         db: Database session
@@ -1007,37 +1007,125 @@ def generate_ai_training_plan(
     Raises:
         ValueError: If player not found or doesn't belong to club
     """
+    from app.config import settings
+    from app.schemas.coach import (
+        AITrainingPlanRequest,
+        AIAttributes,
+        AISeasonStatistics,
+        AIGeneralStats,
+        AIAttackingStats,
+        AIPassingStats,
+        AIDribblingStats,
+        AIDefendingStats,
+    )
+    from app.services.ai_training_plan_service import generate_ai_training_plan as ai_service
+
     # Verify ownership
     player = verify_player_ownership(db, player_id, club_id)
 
-    # Stub implementation - return hardcoded example
+    # Get player season statistics
+    season_stats = db.query(PlayerSeasonStatistics).filter(
+        PlayerSeasonStatistics.player_id == player_id
+    ).first()
+
+    # Build attributes from season stats
+    if season_stats:
+        attributes = AIAttributes(
+            attacking_rating=_default_zero(season_stats.attacking_rating),
+            technique_rating=_default_zero(season_stats.technique_rating),
+            creativity_rating=_default_zero(season_stats.creativity_rating),
+            tactical_rating=_default_zero(season_stats.tactical_rating),
+            defending_rating=_default_zero(season_stats.defending_rating)
+        )
+
+        season_statistics = AISeasonStatistics(
+            general=AIGeneralStats(
+                matches_played=_default_zero(season_stats.matches_played)
+            ),
+            attacking=AIAttackingStats(
+                goals=_default_zero(season_stats.goals),
+                assists=_default_zero(season_stats.assists),
+                expected_goals=float(_default_zero(season_stats.expected_goals)),
+                shots_per_game=float(_default_zero(season_stats.shots_per_game)),
+                shots_on_target_per_game=float(_default_zero(season_stats.shots_on_target_per_game))
+            ),
+            passing=AIPassingStats(
+                total_passes=_default_zero(season_stats.total_passes),
+                passes_completed=_default_zero(season_stats.passes_completed)
+            ),
+            dribbling=AIDribblingStats(
+                total_dribbles=_default_zero(season_stats.total_dribbles),
+                successful_dribbles=_default_zero(season_stats.successful_dribbles)
+            ),
+            defending=AIDefendingStats(
+                tackles=_default_zero(season_stats.tackles),
+                tackle_success_rate=float(_default_zero(season_stats.tackle_success_rate)),
+                interceptions=_default_zero(season_stats.interceptions),
+                interception_success_rate=float(_default_zero(season_stats.interception_success_rate))
+            )
+        )
+    else:
+        # Default values if no stats
+        attributes = AIAttributes(
+            attacking_rating=50,
+            technique_rating=50,
+            creativity_rating=50,
+            tactical_rating=50,
+            defending_rating=50
+        )
+
+        season_statistics = AISeasonStatistics(
+            general=AIGeneralStats(matches_played=0),
+            attacking=AIAttackingStats(
+                goals=0,
+                assists=0,
+                expected_goals=0.0,
+                shots_per_game=0.0,
+                shots_on_target_per_game=0.0
+            ),
+            passing=AIPassingStats(
+                total_passes=0,
+                passes_completed=0
+            ),
+            dribbling=AIDribblingStats(
+                total_dribbles=0,
+                successful_dribbles=0
+            ),
+            defending=AIDefendingStats(
+                tackles=0,
+                tackle_success_rate=0.0,
+                interceptions=0,
+                interception_success_rate=0.0
+            )
+        )
+
+    # Build AI training plan request
+    request = AITrainingPlanRequest(
+        player_id=str(player_id),
+        player_name=player.player_name,
+        position=player.position if player.position else "Unknown",
+        attributes=attributes,
+        season_statistics=season_statistics
+    )
+
+    # Generate training plan using AI service
+    result = await ai_service(request, settings, db)
+
+    # Convert Pydantic model to dict
     return {
-        "player_name": player.player_name,
-        "jersey_number": player.jersey_number,
-        "plan_name": f"AI-Generated Plan for {player.player_name}",
-        "duration": "2 weeks",
+        "player_name": result.player_name,
+        "jersey_number": result.jersey_number,
+        "plan_name": result.plan_name,
+        "duration": result.duration,
         "exercises": [
             {
-                "exercise_name": "Dribbling Drills",
-                "description": "Practice ball control and close dribbling",
-                "sets": "3",
-                "reps": "10",
-                "duration_minutes": "15"
-            },
-            {
-                "exercise_name": "Shooting Practice",
-                "description": "Accuracy and power shooting exercises",
-                "sets": "4",
-                "reps": "8",
-                "duration_minutes": "20"
-            },
-            {
-                "exercise_name": "Passing Combinations",
-                "description": "Short and long passing drills with teammates",
-                "sets": "3",
-                "reps": "12",
-                "duration_minutes": "15"
+                "exercise_name": ex.exercise_name,
+                "description": ex.description,
+                "sets": ex.sets,
+                "reps": ex.reps,
+                "duration_minutes": ex.duration_minutes
             }
+            for ex in result.exercises
         ]
     }
 

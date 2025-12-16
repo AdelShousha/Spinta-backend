@@ -14,7 +14,7 @@ This module contains request and response schemas for:
 All schemas follow the specification in docs/05_COACH_ENDPOINTS.md
 """
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Union
 from datetime import date, datetime
 
@@ -519,9 +519,9 @@ class GeneratedExercise(BaseModel):
     """Generated exercise from AI."""
     exercise_name: str = Field(..., description="Exercise name")
     description: Optional[str] = Field(None, description="Exercise description")
-    sets: Optional[str] = Field(None, description="Number of sets")
-    reps: Optional[str] = Field(None, description="Number of reps")
-    duration_minutes: Optional[str] = Field(None, description="Duration in minutes")
+    sets: Optional[int] = Field(None, ge=1, description="Number of sets")
+    reps: Optional[int] = Field(None, ge=1, description="Number of reps")
+    duration_minutes: Optional[int] = Field(None, ge=1, description="Duration in minutes")
 
 
 class GenerateAITrainingPlanResponse(BaseModel):
@@ -538,9 +538,9 @@ class ExerciseCreate(BaseModel):
     """Exercise creation schema."""
     exercise_name: str = Field(..., min_length=2, max_length=255, description="Exercise name")
     description: Optional[str] = Field(None, description="Exercise description")
-    sets: Optional[str] = Field(None, description="Number of sets")
-    reps: Optional[str] = Field(None, description="Number of reps")
-    duration_minutes: Optional[str] = Field(None, description="Duration in minutes")
+    sets: Optional[int] = Field(None, ge=1, description="Number of sets")
+    reps: Optional[int] = Field(None, ge=1, description="Number of reps")
+    duration_minutes: Optional[int] = Field(None, ge=1, description="Duration in minutes")
     exercise_order: int = Field(..., ge=1, description="Exercise order in plan")
 
 
@@ -573,9 +573,9 @@ class ExerciseDetail(BaseModel):
     exercise_id: str = Field(..., description="Exercise UUID")
     exercise_name: str = Field(..., description="Exercise name")
     description: Optional[str] = Field(None, description="Exercise description")
-    sets: Optional[str] = Field(None, description="Number of sets")
-    reps: Optional[str] = Field(None, description="Number of reps")
-    duration_minutes: Optional[str] = Field(None, description="Duration in minutes")
+    sets: Optional[int] = Field(None, description="Number of sets")
+    reps: Optional[int] = Field(None, description="Number of reps")
+    duration_minutes: Optional[int] = Field(None, description="Duration in minutes")
     completed: bool = Field(..., description="Whether exercise is completed")
     exercise_order: int = Field(..., description="Exercise order")
 
@@ -612,9 +612,9 @@ class ExerciseUpdate(BaseModel):
     exercise_id: Optional[str] = Field(None, description="Exercise UUID (None for new exercise)")
     exercise_name: str = Field(..., min_length=2, max_length=255, description="Exercise name")
     description: Optional[str] = Field(None, description="Exercise description")
-    sets: Optional[str] = Field(None, description="Number of sets")
-    reps: Optional[str] = Field(None, description="Number of reps")
-    duration_minutes: Optional[str] = Field(None, description="Duration in minutes")
+    sets: Optional[int] = Field(None, ge=1, description="Number of sets")
+    reps: Optional[int] = Field(None, ge=1, description="Number of reps")
+    duration_minutes: Optional[int] = Field(None, ge=1, description="Duration in minutes")
     exercise_order: int = Field(..., ge=1, description="Exercise order")
 
 
@@ -642,3 +642,92 @@ class DeleteTrainingPlanResponse(BaseModel):
     """Response schema for deleting training plan."""
     deleted: bool = Field(..., description="Whether deletion was successful")
     plan_id: str = Field(..., description="Deleted training plan UUID")
+
+
+# ============================================================================
+# AI TRAINING PLAN GENERATION SCHEMAS
+# ============================================================================
+
+class AIAttributes(BaseModel):
+    """Player attribute ratings for AI training plan generation."""
+    attacking_rating: int = Field(..., ge=0, le=100, description="Attacking ability rating (0-100)")
+    technique_rating: int = Field(..., ge=0, le=100, description="Technical ability rating (0-100)")
+    creativity_rating: int = Field(..., ge=0, le=100, description="Creativity rating (0-100)")
+    tactical_rating: int = Field(..., ge=0, le=100, description="Tactical awareness rating (0-100)")
+    defending_rating: int = Field(..., ge=0, le=100, description="Defending ability rating (0-100)")
+
+
+class AIGeneralStats(BaseModel):
+    """General season statistics for AI training plan generation."""
+    matches_played: int = Field(..., ge=0, description="Number of matches played")
+
+
+class AIAttackingStats(BaseModel):
+    """Attacking statistics for AI training plan generation."""
+    goals: int = Field(..., ge=0, description="Total goals scored")
+    assists: int = Field(..., ge=0, description="Total assists provided")
+    expected_goals: float = Field(..., ge=0, description="Expected goals (xG)")
+    shots_per_game: float = Field(..., ge=0, description="Average shots per game")
+    shots_on_target_per_game: float = Field(..., ge=0, description="Average shots on target per game")
+
+
+class AIPassingStats(BaseModel):
+    """Passing statistics for AI training plan generation."""
+    total_passes: int = Field(..., ge=0, description="Total passes attempted")
+    passes_completed: int = Field(..., ge=0, description="Total passes completed")
+
+
+class AIDribblingStats(BaseModel):
+    """Dribbling statistics for AI training plan generation."""
+    total_dribbles: int = Field(..., ge=0, description="Total dribbles attempted")
+    successful_dribbles: int = Field(..., ge=0, description="Total successful dribbles")
+
+
+class AIDefendingStats(BaseModel):
+    """Defending statistics for AI training plan generation."""
+    tackles: int = Field(..., ge=0, description="Total tackles attempted")
+    tackle_success_rate: float = Field(..., ge=0, le=100, description="Tackle success rate percentage")
+    interceptions: int = Field(..., ge=0, description="Total interceptions attempted")
+    interception_success_rate: float = Field(..., ge=0, le=100, description="Interception success rate percentage")
+
+
+class AISeasonStatistics(BaseModel):
+    """Complete season statistics for AI training plan generation."""
+    general: AIGeneralStats
+    attacking: AIAttackingStats
+    passing: AIPassingStats
+    dribbling: AIDribblingStats
+    defending: AIDefendingStats
+
+
+class AITrainingPlanRequest(BaseModel):
+    """Request schema for AI training plan generation (POST /api/coach/training-plans/generate-ai)."""
+    player_id: str = Field(..., description="Unique player identifier (UUID)")
+    player_name: str = Field(..., min_length=1, description="Player's full name")
+    position: str = Field(..., min_length=1, description="Player position (e.g., Forward, Midfielder, Defender)")
+    attributes: AIAttributes
+    season_statistics: AISeasonStatistics
+
+    @field_validator("position")
+    @classmethod
+    def validate_position(cls, v: str) -> str:
+        """Normalize position to title case"""
+        return v.title()
+
+
+class AIExercise(BaseModel):
+    """Individual training exercise from AI generation."""
+    exercise_name: str = Field(..., min_length=1, description="Name of the exercise")
+    description: str = Field(..., min_length=1, description="Detailed description of the exercise")
+    sets: int = Field(..., ge=1, description="Number of sets")
+    reps: int = Field(..., ge=1, description="Number of repetitions")
+    duration_minutes: int = Field(..., ge=1, description="Duration in minutes")
+
+
+class AITrainingPlanResponse(BaseModel):
+    """Response schema for AI training plan generation."""
+    player_name: str = Field(..., description="Player's name")
+    jersey_number: int = Field(..., ge=1, le=99, description="Player's jersey number")
+    plan_name: str = Field(..., min_length=1, description="Name of the training plan")
+    duration: str = Field(..., min_length=1, description="Plan duration (e.g., '4 weeks')")
+    exercises: List[AIExercise] = Field(..., min_length=3, max_length=10, description="List of exercises (3-10 exercises)")

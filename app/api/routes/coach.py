@@ -9,7 +9,7 @@ This module contains all endpoints that coaches can access:
 - GET /api/coach/players/{player_id} - Player details
 - GET /api/coach/players/{player_id}/matches/{match_id} - Player match performance
 - GET /api/coach/profile - Coach profile
-- POST /api/coach/training-plans/generate-ai - Generate AI training plan
+- POST /api/coach/training-plans/generate-ai - Generate AI-powered training plan
 - POST /api/coach/training-plans - Create training plan
 - GET /api/coach/training-plans/{plan_id} - Training plan details
 - PUT /api/coach/training-plans/{plan_id} - Update training plan
@@ -497,19 +497,19 @@ def get_player_match_performance(
     "/training-plans/generate-ai",
     response_model=GenerateAITrainingPlanResponse,
     status_code=status.HTTP_200_OK,
-    summary="Generate AI training plan (stub)",
-    description="Generate AI training plan for player. Returns hardcoded example (stub implementation)."
+    summary="Generate AI training plan",
+    description="Generate AI-powered training plan for player using Pydantic AI and RAG knowledge base."
 )
-def generate_ai_training_plan(
+async def generate_ai_training_plan(
     request: GenerateAITrainingPlanRequest,
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db)
 ):
     """
-    Generate AI training plan for player (stub implementation).
+    Generate AI-powered training plan for player.
 
-    This is a stub endpoint that returns a hardcoded example plan.
-    AI integration is out of scope and will be implemented in the future.
+    Uses Pydantic AI with Google Gemini and RAG (PostgreSQL pgvector) to create
+    personalized training plans based on player weaknesses and coaching knowledge.
 
     **Request Body:**
     - player_id: UUID of player to generate plan for
@@ -519,20 +519,27 @@ def generate_ai_training_plan(
     - jersey_number: Player's jersey number
     - plan_name: Generated plan name
     - duration: Plan duration
-    - exercises: List of generated exercises
+    - exercises: List of generated exercises (3-10)
+
+    **AI Process:**
+    1. Analyzes player attributes and season statistics
+    2. Identifies weaknesses (attributes < 60, poor stats)
+    3. Queries coaching knowledge base via RAG tool
+    4. Generates personalized exercises targeting weaknesses
 
     **Errors:**
+    - 400: GEMINI_API_KEY not configured
     - 401: Unauthorized (invalid/missing token)
     - 403: Forbidden (user is not a coach or player doesn't belong to club)
     - 404: Player not found
-    - 500: Internal server error
+    - 500: Internal server error (AI generation failed)
     """
     try:
         # Get coach's club
         club = coach_service.get_coach_club(db, coach.user_id)
 
-        # Generate AI plan (stub)
-        result = coach_service.generate_ai_training_plan(
+        # Generate AI plan
+        result = await coach_service.generate_ai_training_plan(
             db,
             UUID(request.player_id),
             club.club_id
@@ -542,6 +549,8 @@ def generate_ai_training_plan(
         error_msg = str(e).lower()
         if "not found" in error_msg:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        if "api_key" in error_msg or "gemini" in error_msg:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except Exception as e:
         raise HTTPException(
