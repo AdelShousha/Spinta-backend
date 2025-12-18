@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 
-from app.models import Player, PlayerSeasonStatistics
+from app.models import Player, PlayerSeasonStatistics, PlayerMatchStatistics, Match
+from sqlalchemy import and_
 
 
 def find_player_by_name(
@@ -239,3 +240,97 @@ def compare_players(
     }
 
     return comparison
+
+
+def get_player_match_performance(
+    db: Session,
+    player_name: str,
+    club_id: UUID,
+    match_description: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Get detailed statistics for a player in a specific match.
+
+    Args:
+        db: Database session
+        player_name: Player name
+        club_id: Club ID
+        match_description: Match description (e.g., "last match", "vs Team X")
+
+    Returns:
+        Player match statistics
+    """
+    # First find the player
+    player_info = find_player_by_name(db, player_name, club_id)
+    if not player_info:
+        return {"error": f"Player '{player_name}' not found"}
+
+    player_id = UUID(player_info["player_id"])
+
+    # Build query based on match description
+    if not match_description or match_description.lower() in ["last match", "latest match", "most recent"]:
+        # Get most recent match
+        query = (
+            select(Match, PlayerMatchStatistics)
+            .join(PlayerMatchStatistics, Match.match_id == PlayerMatchStatistics.match_id)
+            .where(
+                and_(
+                    Match.club_id == str(club_id),
+                    PlayerMatchStatistics.player_id == str(player_id)
+                )
+            )
+            .order_by(Match.match_date.desc())
+            .limit(1)
+        )
+    else:
+        # Search by opponent name
+        opponent_search = match_description.lower().replace("vs ", "").replace("against ", "").strip()
+        query = (
+            select(Match, PlayerMatchStatistics)
+            .join(PlayerMatchStatistics, Match.match_id == PlayerMatchStatistics.match_id)
+            .where(
+                and_(
+                    Match.club_id == str(club_id),
+                    PlayerMatchStatistics.player_id == str(player_id),
+                    Match.opponent_name.ilike(f"%{opponent_search}%")
+                )
+            )
+            .order_by(Match.match_date.desc())
+            .limit(1)
+        )
+
+    result = db.execute(query)
+    row = result.first()
+
+    if not row:
+        return {
+            "player_name": player_info["name"],
+            "error": "No match statistics found"
+        }
+
+    match, stats = row
+
+    return {
+        "player_name": player_info["name"],
+        "match_date": match.match_date.strftime("%Y-%m-%d"),
+        "opponent": match.opponent_name,
+        "match_score": f"{match.our_score}-{match.opponent_score}",
+        "result": match.result,
+        "goals": stats.goals or 0,
+        "assists": stats.assists or 0,
+        "expected_goals": round(float(stats.expected_goals), 2) if stats.expected_goals else 0,
+        "shots": stats.shots or 0,
+        "shots_on_target": stats.shots_on_target or 0,
+        "total_passes": stats.total_passes or 0,
+        "completed_passes": stats.completed_passes or 0,
+        "short_passes": stats.short_passes or 0,
+        "long_passes": stats.long_passes or 0,
+        "final_third_passes": stats.final_third_passes or 0,
+        "crosses": stats.crosses or 0,
+        "total_dribbles": stats.total_dribbles or 0,
+        "successful_dribbles": stats.successful_dribbles or 0,
+        "tackles": stats.tackles or 0,
+        "tackle_success_rate": round(float(stats.tackle_success_rate), 1) if stats.tackle_success_rate else 0,
+        "interceptions": stats.interceptions or 0,
+        "interception_success_rate": round(float(stats.interception_success_rate), 1) if stats.interception_success_rate else 0
+    }

@@ -19,9 +19,11 @@ from app.services.chatbot import (
     get_top_scorers,
     get_top_assisters,
     compare_players,
+    get_player_match_performance,
     get_last_match,
     get_match_details,
     get_match_statistics,
+    get_match_goals_timeline,
     get_club_season_stats,
     get_squad_list,
 )
@@ -176,6 +178,38 @@ class LLMService:
                     required=[]
                 )
             ),
+            types.FunctionDeclaration(
+                name="get_player_match_performance",
+                description="Get detailed statistics for a player in a specific match including goals, assists, passes, shots, dribbles, and defensive actions",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "player_name": types.Schema(
+                            type=types.Type.STRING,
+                            description="Player's name (first name, last name, or full name)"
+                        ),
+                        "match_description": types.Schema(
+                            type=types.Type.STRING,
+                            description="Match description like 'last match', 'vs Team X', or 'against France'. Defaults to last match if not specified."
+                        )
+                    },
+                    required=["player_name"]
+                )
+            ),
+            types.FunctionDeclaration(
+                name="get_match_goals_timeline",
+                description="Get timeline of all goals scored in a match with scorers and timestamps",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "match_description": types.Schema(
+                            type=types.Type.STRING,
+                            description="Match description like 'last match', 'vs Team X', or 'against France'. Defaults to last match if not specified."
+                        )
+                    },
+                    required=[]
+                )
+            ),
         ]
 
         return [types.Tool(function_declarations=function_declarations)]
@@ -188,9 +222,11 @@ class LLMService:
             "get_top_assisters": get_top_assisters,
             "find_player_by_name": find_player_by_name,
             "compare_players": compare_players,
+            "get_player_match_performance": get_player_match_performance,
             "get_last_match": get_last_match,
             "get_match_details": get_match_details,
             "get_match_statistics": get_match_statistics,
+            "get_match_goals_timeline": get_match_goals_timeline,
             "get_club_season_stats": get_club_season_stats,
             "get_squad_list": get_squad_list,
         }

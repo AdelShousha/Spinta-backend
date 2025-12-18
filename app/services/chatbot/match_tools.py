@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 from uuid import UUID
 
-from app.models import Match, MatchStatistics
+from app.models import Match, MatchStatistics, Goal
 
 
 def get_last_match(
@@ -179,3 +179,54 @@ def get_match_statistics(
         }
 
     return response
+
+
+def get_match_goals_timeline(
+    db: Session,
+    club_id: UUID,
+    match_description: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Get timeline of goals scored in a match.
+
+    Args:
+        db: Database session
+        club_id: Club ID
+        match_description: Match description (e.g., "last match", "vs Team X")
+
+    Returns:
+        Goals timeline with scorers
+    """
+    # Get the match
+    match_info = get_match_details(db, club_id, match_description)
+    if not match_info:
+        return {"error": "Match not found"}
+
+    match_id = UUID(match_info["match_id"])
+
+    # Get all goals ordered by time
+    query = (
+        select(Goal)
+        .where(Goal.match_id == str(match_id))
+        .order_by(Goal.minute, Goal.second)
+    )
+
+    result = db.execute(query)
+    goals = result.scalars().all()
+
+    return {
+        "match_date": match_info["date"],
+        "opponent": match_info["opponent"],
+        "final_score": match_info["score"],
+        "goals": [
+            {
+                "minute": goal.minute or 0,
+                "second": goal.second or 0,
+                "scorer": goal.scorer_name,
+                "is_our_goal": goal.is_our_goal,
+                "team": "Our Team" if goal.is_our_goal else match_info["opponent"]
+            }
+            for goal in goals
+        ],
+        "total_goals": len(goals)
+    }
