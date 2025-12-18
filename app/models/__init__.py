@@ -42,6 +42,7 @@ from app.models.training_plan import TrainingPlan
 from app.models.training_exercise import TrainingExercise
 
 from app.models.knowledge_embedding import KnowledgeEmbedding
+from app.models.conversation_message import ConversationMessage
 
 # allow clean imports from app.models
 # Instead of this:
@@ -71,4 +72,5 @@ __all__ = [
     "TrainingPlan",
     "TrainingExercise",
     "KnowledgeEmbedding",
+    "ConversationMessage",
 ]
